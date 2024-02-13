@@ -15,13 +15,29 @@ pub struct BrainfuckVM<T> {
     allow_growth: bool,
 }
 
+impl<T> BrainfuckVM<T> {
+    /// Returns a reference to the tape of the virtual machine.
+    pub fn tape(&self) -> &Vec<T> {
+        &self.tape
+    }
+
+    /// Returns the current head position on the tape.
+    pub fn head(&self) -> usize {
+        self.head
+    }
+
+    /// Returns whether the tape is allowed to grow beyond its initial size.
+    pub fn allow_growth(&self) -> bool {
+        self.allow_growth
+    }
+}
+
 impl<T: Default + Clone> BrainfuckVM<T> {
     /// Creates a new Brainfuck virtual machine with a specified tape size and growth allowance.
     ///
     /// # Arguments
     ///
-    /// * `cell_count` - An optional `NonZeroUsize` that specifies the number of cells in the tape.
-    ///                  If `None`, defaults to 30,000 cells.
+    /// * `cell_count` - A `NonZeroUsize` that specifies the number of cells in the tape.
     /// * `allow_growth` - A boolean indicating whether the tape is allowed to grow beyond its initial size.
     ///
     /// # Returns
@@ -32,14 +48,15 @@ impl<T: Default + Clone> BrainfuckVM<T> {
     ///
     /// ```
     /// use bft_interp::BrainfuckVM;
+    /// use std::num::NonZeroUsize;
     ///
-    /// let vm = BrainfuckVM::<u8>::new(None, false);
-    /// // Creates a new BrainfuckVM with the default 30,000 cells and no growth.
+    /// let cell_count = NonZeroUsize::new(30000).expect("Cell count cannot be zero");
+    /// let vm = BrainfuckVM::<u8>::new(cell_count, false);
+    /// // Creates a new BrainfuckVM with 30,000 cells and no growth.
     /// ```
-    pub fn new(cell_count: Option<NonZeroUsize>, allow_growth: bool) -> Self {
-        let size = cell_count.map_or(30000, NonZeroUsize::get);
+    pub fn new(cell_count: NonZeroUsize, allow_growth: bool) -> Self {
         BrainfuckVM {
-            tape: vec![T::default(); size],
+            tape: vec![T::default(); cell_count.get()],
             head: 0,
             allow_growth,
         }
@@ -57,10 +74,13 @@ impl<T: Default + Clone> BrainfuckVM<T> {
     /// # Examples
     ///
     /// ```
-    /// # use bft_interp::BrainfuckVM;
-    /// # use bft_types::Program;
-    /// # let program = Program::new("example.bf", "+-<>.");
-    /// # let vm = BrainfuckVM::<u8>::new(None, false);
+    /// use bft_interp::BrainfuckVM;
+    /// use bft_types::Program;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let program = Program::new("example.bf", "+-<>.");
+    /// let cell_count = NonZeroUsize::new(30000).expect("Cell count cannot be zero");
+    /// let vm = BrainfuckVM::<u8>::new(cell_count, false);
     /// vm.interpret(&program);
     /// // This will print the Brainfuck program's instructions.
     /// ```

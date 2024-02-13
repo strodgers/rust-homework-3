@@ -104,28 +104,18 @@ impl Program {
 /// Returns `true` if the byte corresponds to a valid Brainfuck instruction,
 /// otherwise returns `false`.
 fn is_bf_instruction(b: u8) -> bool {
-    match b {
-        b'>' | b'<' | b'+' | b'-' | b'.' | b',' | b'[' | b']' => true,
-        _ => false,
-    }
+    matches!(b, b'>' | b'<' | b'+' | b'-' | b'.' | b',' | b'[' | b']')
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[test]
+fn test_parse_bf_instructions() {
+    let content = "+-><.,[]";
+    let program = Program::new("test.bf", content);
 
-    #[test]
-    fn test_parse_bf_instructions() {
-        let content = "+-><.,[]";
-        let program = Program::new("test.bf", content);
-
-        assert_eq!(
-            program.get_instructions(),
-            &[b'+', b'-', b'>', b'<', b'.', b',', b'[', b']']
-        );
-    }
-
-    // Additional tests for tracking line and column numbers can be added here
+    assert_eq!(
+        program.get_instructions(),
+        [b'+', b'-', b'>', b'<', b'.', b',', b'[', b']']
+    );
 }
 
 #[test]
@@ -147,12 +137,24 @@ fn test_empty_content() {
     assert!(program.get_instructions().is_empty());
 }
 
-#[test]
-fn test_load_from_file() {
-    let content = "+-><.,[]";
-    // Write `content` to a temporary file and pass the file path to `Program::from_file`
-    // ...
-    // Assert that the loaded program's instructions match the expected content
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_load_from_file() {
+        let content = "+-><.,[]";
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        writeln!(temp_file, "{}", content).expect("Failed to write to temporary file");
+        let program =
+            Program::from_file(temp_file.path()).expect("Failed to load program from file");
+        assert_eq!(
+            String::from_utf8_lossy(&program.get_instructions()),
+            content
+        );
+    }
 }
 
 #[test]
@@ -161,12 +163,4 @@ fn test_get_filename() {
     let program = Program::new(filename, "+-><.,[]");
 
     assert_eq!(program.get_filename(), filename);
-}
-
-#[test]
-fn test_instruction_parsing() {
-    let content = "+++[>----<-]>.";
-    let program = Program::new("test.bf", content);
-
-    // Assert that the parsed instructions match the expected sequence
 }
