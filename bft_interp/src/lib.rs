@@ -3,34 +3,32 @@ use std::num::NonZeroUsize;
 
 /// A virtual machine for interpreting Brainfuck programs.
 ///
-/// This struct represents the state of a Brainfuck interpreter, including its tape of cells,
-/// the head position on the tape, and whether the tape is allowed to grow.
-///
-/// # Type Parameters
-///
-/// * `T` - The type of the cells in the tape. Typically `u8` for classical Brainfuck implementations.
+/// The type for each cell of the Brainfuck tape can be chosen by the
+/// user of the virtual machine.
+// TODO: remove once we're using this properly
+#[allow(dead_code)]
 pub struct BrainfuckVM<T> {
     tape: Vec<T>,
     head: usize,
     allow_growth: bool,
 }
 
-impl<T> BrainfuckVM<T> {
-    /// Returns a reference to the tape of the virtual machine.
-    pub fn tape(&self) -> &Vec<T> {
-        &self.tape
-    }
-
-    /// Returns the current head position on the tape.
-    pub fn head(&self) -> usize {
-        self.head
-    }
-
-    /// Returns whether the tape is allowed to grow beyond its initial size.
-    pub fn allow_growth(&self) -> bool {
-        self.allow_growth
-    }
-}
+// impl<T> BrainfuckVM<T> {
+//     /// Returns a reference to the tape of the virtual machine.
+//     pub fn tape(&self) -> &Vec<T> {
+//         &self.tape
+//     }
+//
+//     /// Returns the current head position on the tape.
+//     pub fn head(&self) -> usize {
+//         self.head
+//     }
+//
+//     /// Returns whether the tape is allowed to grow beyond its initial size.
+//     pub fn allow_growth(&self) -> bool {
+//         self.allow_growth
+//     }
+// }
 
 impl<T: Default + Clone> BrainfuckVM<T> {
     /// Creates a new Brainfuck virtual machine with a specified tape size and growth allowance.
@@ -54,6 +52,8 @@ impl<T: Default + Clone> BrainfuckVM<T> {
     /// let vm = BrainfuckVM::<u8>::new(cell_count, false);
     /// // Creates a new BrainfuckVM with 30,000 cells and no growth.
     /// ```
+    // TODO: change back to Option<NonZeroUsize> and when you do, remember
+    // about Option::map_or to write it nicely.
     pub fn new(cell_count: NonZeroUsize, allow_growth: bool) -> Self {
         BrainfuckVM {
             tape: vec![T::default(); cell_count.get()],
@@ -85,7 +85,7 @@ impl<T: Default + Clone> BrainfuckVM<T> {
     /// // This will print the Brainfuck program's instructions.
     /// ```
     pub fn interpret(&self, program: &Program) {
-        for &instruction in program.get_instructions() {
+        for &instruction in program.instructions() {
             print!("{}", instruction as char);
         }
         println!(); // To add a newline at the end of the output

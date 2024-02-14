@@ -3,8 +3,10 @@ use bft_types::Program;
 use clap::Parser;
 use std::error::Error;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
+// TODO: maybe this comment should be on fn main()
 /// Entry point for the Brainfuck interpreter program.
 ///
 /// This program reads a filename from the command line, loads a Brainfuck program from that file,
@@ -35,15 +37,16 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 #[command(version, about, author = "Sam Rodgers")]
 struct Args {
     /// Name of the Brainfuck program to interpret
-    #[arg(short, long)]
-    filename: String,
+    filename: PathBuf,
 
-    /// Whether the tape is allowed to grow [default: false]
-    #[arg(short, long, default_value_t = false)]
+    /// Allow the tap to grow
+    #[arg(short, long)]
     allow_growth: bool,
 
-    /// Specifies the number of cells in the tape
-    #[arg(short, long, default_value = "30000")] // Convert Option<NonZeroUsize> to String
+    /// Specifies the number of cells in the tape.
+    ///
+    /// Traditionally Brainfuck interpreters use a tape of 30,000 cells.
+    #[arg(short, long)] // Convert Option<NonZeroUsize> to String
     cell_count: Option<NonZeroUsize>,
 }
 
