@@ -4,7 +4,6 @@ use clap::Parser;
 use std::error::Error;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
 mod cli;
 use cli::Cli;
 // TODO: maybe this comment should be on fn main()
@@ -51,14 +50,14 @@ struct Args {
     cell_count: Option<NonZeroUsize>,
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     let program_name = cli.program;
 
-    let program = Program::new(program_name);
+    let program = Program::new(program_name)?;
 
-    let cell_count: NonZeroUsize = NonZeroUsize::new(cli.cell_count).expect("Failed to create NonZeroUsize");
+    let cell_count: NonZeroUsize = NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
 
     let vm = BrainfuckVM::<u8>::new(cell_count, cli.allow_growth);
 

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::error::Error;
 
 // Enum for the raw instructions
 #[derive(Debug, PartialEq)]
@@ -67,8 +68,8 @@ impl HumanReadableInstruction {
     fn new(instruction: RawInstruction, line: usize, column: usize) -> Self {
         HumanReadableInstruction {
             instruction,
-            line,
-            column,
+            line: line + 1,
+            column: column + 1,
         }
     }
 }
@@ -80,10 +81,42 @@ impl fmt::Display for HumanReadableInstruction {
     }
 }
 
+struct BracketBalancer {
+    counter: i32,
+}
+
+impl BracketBalancer {
+    fn new() -> Self {
+        BracketBalancer {
+            counter: 0,
+        }
+    }
+
+    fn balance(&mut self, instruction: &HumanReadableInstruction) -> Result<(), String> {
+        match instruction.instruction {
+            RawInstruction::ConditionalForward => self.counter += 1,
+            RawInstruction::ConditionalBackward => {
+                self.counter -= 1;
+                if self.counter < 0 {
+                    return Err(From::from(format!("Unmatched closing bracket at line {}, column {}", instruction.line, instruction.column)));
+                }
+            },
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn balanced(&self) -> bool {
+        self.counter == 0
+    }
+}
+
 fn read_data<P: AsRef<Path>>(fname: P) -> Result<Vec<HumanReadableInstruction>, Box<dyn std::error::Error>> {
     // Read the data and parse into a vector of HumanReadableInstruction
     let buffread = BufReader::new(File::open(fname)?);
     let mut vec = Vec::new();
+    let mut bracket_balancer = BracketBalancer::new();
 
     // Go through each line
     for (line_idx, line_result) in buffread.lines().enumerate() {
@@ -93,21 +126,24 @@ fn read_data<P: AsRef<Path>>(fname: P) -> Result<Vec<HumanReadableInstruction>, 
         for (col_idx, c) in line.chars().enumerate() {
             match RawInstruction::from_char(&c).ok_or("Invalid character") {
                 Ok(instruction) => {
-                    // I am adding 1 to the column and row index here for human readability,
-                    // although that does make my output column index 1 off the example given
-                    // in the homework description...
-                    vec.push(HumanReadableInstruction::new(
+                    let hr_instruction = HumanReadableInstruction::new(
                         instruction,
-                        line_idx + 1,
-                        col_idx + 1,
-                    ));
-                    // println!("Valid character {} at line {} column {}",  c, line_idx + 1, col_idx + 1);
+                        line_idx,
+                        col_idx,
+                    );
+                    if let Err(e) = bracket_balancer.balance(&hr_instruction) {
+                        return Err(e.into());
+                    }
+                    vec.push(hr_instruction);
                 }
                 Err(_) => {
-                    // println!("Invalid character {} at line {} column {}", c, line_idx + 1, col_idx + 1);
                 }
             }
         }
+    }
+
+    if !bracket_balancer.balanced() {
+        return Err("Unmatched opening bracket... somewhere".into());
     }
 
     Ok(vec)
@@ -123,11 +159,13 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new<P: AsRef<Path>>(filename: P) -> Self {
-        Program {
+    pub fn new<P: AsRef<Path>>(filename: P) -> Result<Self, Box<dyn Error>> {
+        let instructions = read_data(&filename)?;
+
+        Ok(Program {
             filename: filename.as_ref().to_owned(),
-            instructions: read_data(&filename).expect("Failed reading file")
-        }
+            instructions,
+        })
     }
 
     /// The filename from which the program was loaded
@@ -153,12 +191,12 @@ mod tests {
     }
     
     impl TestFile {
-        fn new(filename: &str) -> Self {
+        fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
             let path = PathBuf::from(filename);
-            let mut file = File::create(&path).expect("Failed to create file");
-            writeln!(file, "+-><.,[]").expect("Failed to write to file");
+            let mut file = File::create(&path)?;
+            writeln!(file, "+-><.,[]")?;
     
-            TestFile { path }
+            Ok(TestFile { path })
         }
 
         fn path(&self) -> &PathBuf {
@@ -168,8 +206,11 @@ mod tests {
 
     impl Drop for TestFile {
         fn drop(&mut self) {
-            fs::remove_file(&self.path).expect("Failed to delete file");
-            println!("Cleanup: Test file deleted.");
+            if let Err(e) = fs::remove_file(&self.path) {
+                eprintln!("Cleanup error: Failed to delete file: {}", e);
+            } else {
+                println!("Cleanup: Test file deleted.");
+            }
         }
     }
 
@@ -178,17 +219,16 @@ mod tests {
     fn test_human_readable_instruction_display() {
         let instruction = HumanReadableInstruction::new(
             RawInstruction::IncrementByte,
-            1,
-            1,
+            0,
+            0,
         );
         assert_eq!(format!("{}", instruction), "1:1 Increment Byte (+)\n");
     }
 
     #[test]
-    fn test_read_data() {
-        let instructions = read_data(
-            TestFile::new("test.bf").path().to_owned()
-        ).expect("Failed to read data");
+    fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
+        let test_file = TestFile::new("test.bf")?;
+        let instructions = read_data(test_file.path().to_owned())?;
         assert_eq!(instructions.len(), 8);
 
         assert_eq!(instructions[0].instruction, RawInstruction::IncrementByte);
@@ -222,6 +262,8 @@ mod tests {
         assert_eq!(instructions[7].instruction, RawInstruction::ConditionalBackward);
         assert_eq!(instructions[7].line, 1);
         assert_eq!(instructions[7].column, 8);
+
+        Ok(())
     }
 
 }
