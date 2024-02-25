@@ -55,9 +55,9 @@ fn main() -> Result<()> {
 
     let filename = args.filename;
 
-    let program = Program::from_file(filename)?;
+    let program = Program::new(filename);
 
-    let cell_count = args.cell_count.expect("Cell count must be provided");
+    let cell_count: NonZeroUsize = args.cell_count.unwrap_or_else(|| NonZeroUsize::new(30000).expect("Failed to create NonZeroUsize"));
 
     let vm = BrainfuckVM::<u8>::new(cell_count, args.allow_growth);
 

@@ -78,15 +78,15 @@ impl<T: Default + Clone> BrainfuckVM<T> {
     /// use bft_types::Program;
     /// use std::num::NonZeroUsize;
     ///
-    /// let program = Program::new("example.bf", "+-<>.");
+    /// let program = Program::new("example.bf");
     /// let cell_count = NonZeroUsize::new(30000).expect("Cell count cannot be zero");
     /// let vm = BrainfuckVM::<u8>::new(cell_count, false);
     /// vm.interpret(&program);
     /// // This will print the Brainfuck program's instructions.
     /// ```
     pub fn interpret(&self, program: &Program) {
-        for &instruction in program.instructions() {
-            print!("{}", instruction as char);
+        for instruction in program.instructions().iter() {
+            print!("{}", instruction);
         }
         println!(); // To add a newline at the end of the output
     }
