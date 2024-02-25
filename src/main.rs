@@ -5,7 +5,8 @@ use std::error::Error;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
-
+mod cli;
+use cli::Cli;
 // TODO: maybe this comment should be on fn main()
 /// Entry point for the Brainfuck interpreter program.
 ///
@@ -51,15 +52,15 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let cli = Cli::parse();
 
-    let filename = args.filename;
+    let program_name = cli.program;
 
-    let program = Program::new(filename);
+    let program = Program::new(program_name);
 
-    let cell_count: NonZeroUsize = args.cell_count.unwrap_or_else(|| NonZeroUsize::new(30000).expect("Failed to create NonZeroUsize"));
+    let cell_count: NonZeroUsize = NonZeroUsize::new(cli.cell_count).expect("Failed to create NonZeroUsize");
 
-    let vm = BrainfuckVM::<u8>::new(cell_count, args.allow_growth);
+    let vm = BrainfuckVM::<u8>::new(cell_count, cli.allow_growth);
 
     // Use the interpreter function to print the BF program
     vm.interpret(&program);

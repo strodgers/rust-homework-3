@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+app = "0.6.5"
 bft_interp = { path = "./bft_interp" }
 bft_types = { path = "./bft_types" }
 clap = { version = "4.5.0", features = ["derive"] }
