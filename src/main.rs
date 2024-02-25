@@ -6,6 +6,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 mod cli;
 use cli::Cli;
+use std::process;
 // TODO: maybe this comment should be on fn main()
 /// Entry point for the Brainfuck interpreter program.
 ///
@@ -50,9 +51,7 @@ struct Args {
     cell_count: Option<NonZeroUsize>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let cli = Cli::parse();
-
+fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     let program_name = cli.program;
 
     let program = Program::new(program_name)?;
@@ -65,4 +64,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     vm.interpret(&program);
 
     Ok(())
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    if let Err(e) = run_bft(cli) {
+        eprintln!("bft: Error encountered: {}", e);
+        process::exit(1);
+    }
 }
