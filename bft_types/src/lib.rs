@@ -11,7 +11,7 @@ use std::error::Error;
 
 // Enum for the raw instructions
 #[derive(Debug, PartialEq)]
-enum RawInstruction {
+pub enum RawInstruction {
     IncrementPointer,    // >
     DecrementPointer,    // <
     IncrementByte,       // +
