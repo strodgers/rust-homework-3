@@ -56,7 +56,8 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
 
     let program = Program::new(program_name)?;
 
-    let cell_count: NonZeroUsize = NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
+    let cell_count: NonZeroUsize =
+        NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
 
     let mut vm = BrainfuckVM::<u8>::new(&program, cell_count, cli.allow_growth);
 

@@ -3,11 +3,11 @@
 //! This includes capabilities to represent instructions and their provenance,
 //! and to parse programs from files.
 
-use std::path::{Path, PathBuf};
+use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::error::Error;
+use std::path::{Path, PathBuf};
 
 // Enum for the raw instructions
 #[derive(Debug, PartialEq)]
@@ -55,7 +55,6 @@ impl fmt::Display for RawInstruction {
     }
 }
 
-
 // Struct for the human readable instructions which includes a RawInstruction and the line and column index
 #[derive(Debug)]
 pub struct HumanReadableInstruction {
@@ -87,9 +86,7 @@ struct BracketBalancer {
 
 impl BracketBalancer {
     fn new() -> Self {
-        BracketBalancer {
-            counter: 0,
-        }
+        BracketBalancer { counter: 0 }
     }
 
     fn balance(&mut self, instruction: &HumanReadableInstruction) -> Result<(), String> {
@@ -98,9 +95,12 @@ impl BracketBalancer {
             RawInstruction::ConditionalBackward => {
                 self.counter -= 1;
                 if self.counter < 0 {
-                    return Err(From::from(format!("Unmatched closing bracket at line {}, column {}", instruction.line, instruction.column)));
+                    return Err(From::from(format!(
+                        "Unmatched closing bracket at line {}, column {}",
+                        instruction.line, instruction.column
+                    )));
                 }
-            },
+            }
             _ => {}
         }
 
@@ -112,7 +112,9 @@ impl BracketBalancer {
     }
 }
 
-fn read_data<P: AsRef<Path>>(fname: P) -> Result<Vec<HumanReadableInstruction>, Box<dyn std::error::Error>> {
+fn read_data<P: AsRef<Path>>(
+    fname: P,
+) -> Result<Vec<HumanReadableInstruction>, Box<dyn std::error::Error>> {
     // Read the data and parse into a vector of HumanReadableInstruction
     let buffread = BufReader::new(File::open(fname)?);
     let mut vec = Vec::new();
@@ -126,18 +128,14 @@ fn read_data<P: AsRef<Path>>(fname: P) -> Result<Vec<HumanReadableInstruction>, 
         for (col_idx, c) in line.chars().enumerate() {
             match RawInstruction::from_char(&c).ok_or("Invalid character") {
                 Ok(instruction) => {
-                    let hr_instruction = HumanReadableInstruction::new(
-                        instruction,
-                        line_idx,
-                        col_idx,
-                    );
+                    let hr_instruction =
+                        HumanReadableInstruction::new(instruction, line_idx, col_idx);
                     if let Err(e) = bracket_balancer.balance(&hr_instruction) {
                         return Err(e.into());
                     }
                     vec.push(hr_instruction);
                 }
-                Err(_) => {
-                }
+                Err(_) => {}
             }
         }
     }
@@ -185,17 +183,17 @@ mod tests {
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::PathBuf;
-    
+
     struct TestFile {
         path: PathBuf,
     }
-    
+
     impl TestFile {
         fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
             let path = PathBuf::from(filename);
             let mut file = File::create(&path)?;
             writeln!(file, "+-><.,[]")?;
-    
+
             Ok(TestFile { path })
         }
 
@@ -214,14 +212,9 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_human_readable_instruction_display() {
-        let instruction = HumanReadableInstruction::new(
-            RawInstruction::IncrementByte,
-            0,
-            0,
-        );
+        let instruction = HumanReadableInstruction::new(RawInstruction::IncrementByte, 0, 0);
         assert_eq!(format!("{}", instruction), "1:1 Increment Byte (+)\n");
     }
 
@@ -239,11 +232,17 @@ mod tests {
         assert_eq!(instructions[1].line, 1);
         assert_eq!(instructions[1].column, 2);
 
-        assert_eq!(instructions[2].instruction, RawInstruction::IncrementPointer);
+        assert_eq!(
+            instructions[2].instruction,
+            RawInstruction::IncrementPointer
+        );
         assert_eq!(instructions[2].line, 1);
         assert_eq!(instructions[2].column, 3);
 
-        assert_eq!(instructions[3].instruction, RawInstruction::DecrementPointer);
+        assert_eq!(
+            instructions[3].instruction,
+            RawInstruction::DecrementPointer
+        );
         assert_eq!(instructions[3].line, 1);
         assert_eq!(instructions[3].column, 4);
 
@@ -255,15 +254,20 @@ mod tests {
         assert_eq!(instructions[5].line, 1);
         assert_eq!(instructions[5].column, 6);
 
-        assert_eq!(instructions[6].instruction, RawInstruction::ConditionalForward);
+        assert_eq!(
+            instructions[6].instruction,
+            RawInstruction::ConditionalForward
+        );
         assert_eq!(instructions[6].line, 1);
         assert_eq!(instructions[6].column, 7);
 
-        assert_eq!(instructions[7].instruction, RawInstruction::ConditionalBackward);
+        assert_eq!(
+            instructions[7].instruction,
+            RawInstruction::ConditionalBackward
+        );
         assert_eq!(instructions[7].line, 1);
         assert_eq!(instructions[7].column, 8);
 
         Ok(())
     }
-
 }
