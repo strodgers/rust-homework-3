@@ -15,6 +15,10 @@ pub trait CellKind {
     fn decrement(&mut self);
     fn set(&mut self, value: Self);
     fn get(&self) -> Self;
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        Self: Sized;
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 impl CellKind for u8 {
@@ -33,6 +37,17 @@ impl CellKind for u8 {
 
     fn get(&self) -> Self {
         *self
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        Self: Sized,
+    {
+        Ok(*bytes.get(0).unwrap_or(&0))
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        vec![*self]
     }
 }
 

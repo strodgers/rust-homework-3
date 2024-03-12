@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 
 /// This doc comment acts as a help display for the CLI.
@@ -6,7 +8,7 @@ use clap::Parser;
 pub struct Cli {
     /// The Brainfuck program to execute
     #[clap(name = "PROGRAM")]
-    pub program: String,
+    pub program: PathBuf,
 
     /// Number of cells in the tape
     #[clap(short, long, default_value_t = 30000)]

@@ -1,10 +1,11 @@
 use bft_types::Program;
 use bft_types::{CellKind, HumanReadableInstruction, RawInstruction};
-use num_traits::{Num, NumCast};
+use num_traits::{FromBytes, Num, NumCast};
 use std::fmt;
 use std::hash::Hash;
 use std::io::{Read, Write};
 use std::num::NonZeroUsize;
+
 #[derive(Debug)]
 pub enum VMError {
     InvalidHeadPosition {
@@ -81,7 +82,7 @@ impl<'a> fmt::Display for VMError {
 // TODO: remove once we're using this properly where
 pub struct BrainfuckVM<'a, N>
 where
-    N: Num + NumCast + Hash + Clone + Eq + Copy,
+    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
 {
     tape: Vec<N>,
     head: usize,
@@ -92,7 +93,7 @@ where
 
 impl<'a, N> BrainfuckVM<'a, N>
 where
-    N: Num + NumCast + Eq + Copy + CellKind + Hash + Default,
+    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
 {
     pub fn new(program: &'a Program, cell_count: NonZeroUsize, allow_growth: bool) -> Self {
         BrainfuckVM {
@@ -167,7 +168,7 @@ where
                 self.decrement_cell()?;
             }
             RawInstruction::OutputByte => {
-                let value = self.current_cell()?.get();
+                // let value = self.current_cell()?.get();
                 // output_the_value_somewhere(value);
             }
             RawInstruction::InputByte => {
@@ -177,7 +178,7 @@ where
             RawInstruction::ConditionalForward => {
                 if self.current_cell()?.is_zero() {
                     // Jump forwards, 1 past the matching closing bracket
-                    return Ok(self.get_bracket_position(hr_instruction)? + 1);
+                    return Ok(self.get_bracket_position(hr_instruction)?);
                 };
             }
             RawInstruction::ConditionalBackward => {
@@ -243,7 +244,7 @@ where
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(VMError::GeneralError {
-                    reason: ("Failed to move head left".to_string()),
+                    reason: ("Failed to move head right".to_string()),
                 });
             }
         }
@@ -263,9 +264,10 @@ where
     }
 
     pub fn read_value<R: Read>(&mut self, reader: &mut R) -> Result<(), VMError> {
-        let mut buffer: [u8; 1] = [0; 1];
+        let bytes_per_cell = std::mem::size_of::<N>();
+        let mut buffer = vec![0u8; bytes_per_cell];
 
-        // Attempt to read a byte from the reader
+        // Read as many bytes to fill the buffer with one N::Value
         reader
             .read_exact(&mut buffer)
             .map_err(|e| VMError::IOError {
@@ -273,26 +275,22 @@ where
                 reason: e.to_string(),
             })?;
 
-        match NumCast::from(buffer[0]) {
-            Some(buf_value) => {
-                self.current_cell()?.set(buf_value);
-            }
-            None => {
-                return Err(VMError::IOError {
-                    instruction: self.program.instructions()[self.program_counter],
-                    reason: ("Failed to read value".to_string()),
-                })
-            }
-        };
+        let value = N::from_bytes(&buffer).map_err(|e| VMError::IOError {
+            instruction: self.program.instructions()[self.program_counter],
+            reason: format!("Failed to read cell value from bytes: {}", e),
+        })?;
+        self.current_cell()?.set(value);
         Ok(())
     }
 
     pub fn write_value<W: Write>(&mut self, writer: &mut W) -> Result<(), VMError> {
-        match NumCast::from(self.current_cell()?.get()) {
-            Some(value) => writer.write_all(&[value]).map_err(|e| VMError::IOError {
-                instruction: self.program.instructions()[self.program_counter],
-                reason: e.to_string(),
-            })?,
+        match N::from(self.current_cell()?.get()) {
+            Some(value) => writer
+                .write_all(&value.to_bytes())
+                .map_err(|e| VMError::IOError {
+                    instruction: self.program.instructions()[self.program_counter],
+                    reason: e.to_string(),
+                })?,
             None => {
                 return Err(VMError::IOError {
                     instruction: self.program.instructions()[self.program_counter],
@@ -315,7 +313,9 @@ mod tests {
 
     // Helper function to create a simple test program
     fn test_program_from_file() -> Result<Program, Box<dyn std::error::Error>> {
-        let file = File::open("/home/sam/git/rust-homework-3/example.bf")?;
+        let file = File::open(
+            "/home/samuelrogers/Documents/rust-course/hw-continued/rust-homework-3/example.bf",
+        )?;
         let program = Program::new(BufReader::new(file))?;
         Ok(program)
     }

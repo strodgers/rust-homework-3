@@ -2,6 +2,8 @@ use bft_interp::BrainfuckVM;
 use bft_types::Program;
 use clap::Parser;
 use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 mod cli;
@@ -52,9 +54,11 @@ struct Args {
 }
 
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    let program_name = cli.program;
+    // let program_name = cli.program;
 
-    let program = Program::new(program_name)?;
+    let file = File::open(cli.program)?;
+
+    let program = Program::new(BufReader::new(file))?;
 
     let cell_count: NonZeroUsize =
         NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
@@ -62,9 +66,12 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     let mut vm = BrainfuckVM::<u8>::new(&program, cell_count, cli.allow_growth);
 
     // Use the interpreter function to print the BF program
-    vm.interpret();
-
-    Ok(())
+    vm.interpret().map_err(|err| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Error: {}", err),
+        )) as Box<dyn std::error::Error>
+    })
 }
 
 fn main() {
