@@ -307,6 +307,16 @@ mod tests {
         assert_eq!(format!("{}", instruction), "1:1 Increment Byte (+)\n");
     }
 
+    #[test]
+    fn test_cellkind_from_bytes_for_u8() {
+        let bytes = [5u8]; // Using a single byte
+
+        let result: Result<u8, Box<dyn std::error::Error>> = <u8 as CellKind>::from_bytes(&bytes);
+
+        // Asserts to check if the conversion was successful and correct.
+        assert!(result.is_ok(), "Expected Ok(_) from from_bytes but got an Err");
+        assert_eq!(result.unwrap(), 5, "Expected the byte value to be 5 after conversion");
+    }
     // #[test]
     // fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
     //     let test_file = TestFile::new("test.bf")?;

@@ -82,7 +82,7 @@ impl<'a> fmt::Display for VMError {
 // TODO: remove once we're using this properly where
 pub struct BrainfuckVM<'a, N>
 where
-    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
+    N: Num + NumCast + Eq + Copy + CellKind + Hash + Default + Sized,
 {
     tape: Vec<N>,
     head: usize,
@@ -93,7 +93,7 @@ where
 
 impl<'a, N> BrainfuckVM<'a, N>
 where
-    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
+    N: Num + NumCast + Eq + Copy + CellKind + Hash + Default + Sized,
 {
     pub fn new(program: &'a Program, cell_count: NonZeroUsize, allow_growth: bool) -> Self {
         BrainfuckVM {
@@ -168,12 +168,20 @@ where
                 self.decrement_cell()?;
             }
             RawInstruction::OutputByte => {
-                // let value = self.current_cell()?.get();
-                // output_the_value_somewhere(value);
+                let output_writer = std::io::stdout();
+                self.write_value(&mut output_writer.lock())
+                    .map_err(|e| VMError::IOError {
+                        instruction: hr_instruction,
+                        reason: e.to_string(),
+                    })?;
             }
             RawInstruction::InputByte => {
-                // let input_value = get_input_value_somehow()
-                // current_cell.set_value(input_value);
+                let input_reader = std::io::stdin();
+                self.read_value(&mut input_reader.lock())
+                    .map_err(|e| VMError::IOError {
+                        instruction: hr_instruction,
+                        reason: e.to_string(),
+                    })?;
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell()?.is_zero() {
@@ -275,10 +283,11 @@ where
                 reason: e.to_string(),
             })?;
 
-        let value = N::from_bytes(&buffer).map_err(|e| VMError::IOError {
+        let value: N = N::from_bytes(&buffer).map_err(|e| VMError::IOError {
             instruction: self.program.instructions()[self.program_counter],
             reason: format!("Failed to read cell value from bytes: {}", e),
         })?;
+
         self.current_cell()?.set(value);
         Ok(())
     }
@@ -313,9 +322,8 @@ mod tests {
 
     // Helper function to create a simple test program
     fn test_program_from_file() -> Result<Program, Box<dyn std::error::Error>> {
-        let file = File::open(
-            "/home/samuelrogers/Documents/rust-course/hw-continued/rust-homework-3/example.bf",
-        )?;
+        // TODO: Change this to a relative path
+        let file = File::open("/home/sam/git/rust-homework-3/example.bf")?;
         let program = Program::new(BufReader::new(file))?;
         Ok(program)
     }
@@ -391,28 +399,25 @@ mod tests {
 
     #[test]
     fn test_increment_cell_success() -> Result<(), Box<dyn std::error::Error>> {
-        let program = test_program_from_string("+")?;
-        let cell_count = NonZeroUsize::new(10).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, true);
+        let max_cell_value = u8::MAX as usize;
+        let program_string = "+".repeat(max_cell_value);
+        let program = test_program_from_string(&program_string)?;
+        let cell_count = NonZeroUsize::new(1).unwrap();
 
-        let Some(hr_instruction) = vm.program.instructions().get(0) else {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Error: "),
-            )) as Box<dyn std::error::Error>);
-        };
+        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
 
-        vm.process_instruction(hr_instruction.to_owned())
-            .map_err(|err| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Error: {}", err),
-                )) as Box<dyn std::error::Error>
-            })?;
+        for (instruction_index, hr_instruction) in vm.program.instructions().iter().enumerate() {
+            let cell_value = vm.tape.get(vm.head).unwrap();
 
-        let cell_value = vm.tape.get(vm.head).unwrap();
-
-        assert_eq!(cell_value.to_owned(), 1);
+            assert_eq!(cell_value.to_owned(), instruction_index as u8);
+            vm.process_instruction(hr_instruction.to_owned())
+                .map_err(|err| {
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Error: {}", err),
+                    )) as Box<dyn std::error::Error>
+                })?;
+        }
 
         Ok(())
     }
@@ -421,7 +426,7 @@ mod tests {
     fn test_decrement_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
         let program = test_program_from_string("-")?;
         let cell_count = NonZeroUsize::new(10).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, true);
+        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, false);
 
         let Some(hr_instruction) = vm.program.instructions().get(0) else {
             return Err(Box::new(std::io::Error::new(
@@ -446,43 +451,69 @@ mod tests {
     }
 
     #[test]
-    fn test_read_value_success<'a>() -> Result<(), Box<dyn std::error::Error>> {
-        let program = test_program_from_file()?;
-        let mut vm: BrainfuckVM<'_, u8> =
-            BrainfuckVM::new(&program, NonZeroUsize::new(10).unwrap(), true);
-        let input_data = 42u8; // Example input byte
-        let mut input_cursor = Cursor::new(vec![input_data]);
+    fn test_increment_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
+        let overflow_cell_value = u8::MAX as usize + 1;
+        let program_string = "+".repeat(overflow_cell_value);
+        let program = test_program_from_string(&program_string)?;
+        let cell_count = NonZeroUsize::new(1).unwrap();
+        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, false);
 
-        vm.read_value(&mut input_cursor)
-            .map_err(|err| format!("Error: {}", err))?;
-        assert_eq!(
-            vm.current_cell_value()
-                .map_err(|err| format!("Error: {}", err))?,
-            input_data,
-            "Cell value should match the read value"
-        );
+        // Only care about final result
+        for hr_instruction in vm.program.instructions().iter() {
+            let _ = vm.process_instruction(hr_instruction.to_owned());
+        }
+        
+        let cell_value = vm.tape.get(vm.head).unwrap();
+        assert_eq!(cell_value.to_owned(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_value_success<'a>() -> Result<(), Box<dyn std::error::Error>> {
+        let max_cell_value = u8::MAX as usize;
+        let program = test_program_from_file()?;
+        let cell_count = NonZeroUsize::new(1).unwrap();
+        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+
+        for index in 0..max_cell_value {
+            let input_data = index as u8;
+            let mut input_cursor = Cursor::new(vec![input_data]);
+    
+            vm.read_value(&mut input_cursor)
+                .map_err(|err| format!("Error: {}", err))?;
+            assert_eq!(
+                vm.current_cell_value()
+                    .map_err(|err| format!("Error: {}", err))?,
+                input_data,
+                "Cell value should match the read value"
+            );
+        }
 
         Ok(())
     }
 
     #[test]
     fn test_write_value_success() -> Result<(), Box<dyn std::error::Error>> {
+        let max_cell_value = u8::MAX as usize;
         let program = test_program_from_file()?;
-        let mut vm: BrainfuckVM<'_, u8> =
-            BrainfuckVM::new(&program, NonZeroUsize::new(10).unwrap(), true);
-        vm.current_cell()
-            .map_err(|err| format!("Error: {}", err))?
-            .set(42);
+        let cell_count = NonZeroUsize::new(1).unwrap();
+        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+        for index in 0..max_cell_value {
+            let output_data = index as u8;
+            vm.current_cell()
+                .map_err(|err| format!("Error: {}", err))?
+                .set(output_data);
 
-        let mut output_cursor = Cursor::new(Vec::new());
-        vm.write_value(&mut output_cursor)
-            .map_err(|err| format!("Error: {}", err))?;
+            let mut output_cursor = Cursor::new(Vec::new());
+            vm.write_value(&mut output_cursor)
+                .map_err(|err| format!("Error: {}", err))?;
 
-        assert_eq!(
-            output_cursor.into_inner(),
-            vec![42],
-            "Output should contain the cell's value"
-        );
+            assert_eq!(
+                output_cursor.into_inner(),
+                vec![output_data],
+                "Output should contain the cell's value"
+            );
+        }
 
         Ok(())
     }
