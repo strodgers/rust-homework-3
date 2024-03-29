@@ -36,6 +36,7 @@ pub enum VMError {
     BuilderError {
         reason: String,
     },
+    EndOfProgram,
 }
 
 impl<'a> fmt::Display for VMError {
@@ -78,6 +79,9 @@ impl<'a> fmt::Display for VMError {
             }
             VMError::BuilderError { reason } => {
                 write!(f, "Builder error: {}", reason)
+            },
+            VMError::EndOfProgram => {
+                write!(f, "End of program")
             }
         }
     }
@@ -97,6 +101,7 @@ where
     input_reader: Option<Box<R>>,
     output_writer: Option<Box<W>>,
     program_reader: Option<Box<dyn Read + 'a>>,
+    program: Option<Program>,
 }
 
 impl<'a, R, W> VMBuilder<'a, R, W>
@@ -112,6 +117,7 @@ where
             input_reader: None,
             output_writer: None,
             program_reader: None,
+            program: None,
         }
     }
 
@@ -126,8 +132,29 @@ where
     //     self
     // }
 
+    // TODO: make this more generic? Read + 'a
     pub fn set_program_file(mut self, file: BufReader<File>) -> Self {
         self.program_reader = Some(Box::new(BufReader::new(file)) as Box<dyn Read + 'a>);
+        self
+    }
+
+    pub fn set_program(mut self, program: Program) -> Self {
+        self.program = Some(program);
+        self
+    }
+
+    pub fn set_cell_kind(mut self, cell_kind: TypeId) -> Self {
+        self.cell_kind = Some(cell_kind);
+        self
+    }
+
+    pub fn set_cell_count(mut self, cell_count: NonZeroUsize) -> Self {
+        self.cell_count = Some(cell_count);
+        self
+    }
+
+    pub fn set_allow_growth(mut self, allow_growth: bool) -> Self {
+        self.allow_growth = Some(allow_growth);
         self
     }
 
@@ -138,13 +165,30 @@ where
         W: Write,
     {
         // Program must be set somehow
-        let program_reader: Box<dyn Read> = match self.program_reader {
-            Some(reader) => reader,
+        if self.program_reader.is_none() && self.program.is_none()
+        {
+            return Err(VMError::BuilderError {
+                reason: "Program must be set by using set_program or set_program_file".to_string(),
+            })
+        }
+
+        let program = match self.program {
+            // If the program has been set, use that
+            Some(program) =>  program,
+            // If not, try and use the program_reader to create a program
             None => {
-                return Err(VMError::BuilderError {
-                    reason: "Program reader must be set.".to_string(),
-                })
-            }
+                let program_reader: Box<dyn Read> = match self.program_reader {
+                    Some(reader) => reader,
+                    None => {
+                        return Err(VMError::BuilderError {
+                            reason: "Program reader must be set.".to_string(),
+                        })
+                    }
+                };
+                Program::new(program_reader).map_err(|err| VMError::BuilderError {
+                    reason: format!("Failed to create program: {}", err),
+                })?
+            },
         };
 
         // Default IO to use stdin and stdout
@@ -191,10 +235,6 @@ where
             println!("Using default allow growth false");
             false
         });
-
-        let program = Program::new(program_reader).map_err(|err| VMError::BuilderError {
-            reason: format!("Failed to create program: {}", err),
-        })?;
 
         Ok(BrainfuckVM::new(
             program,
@@ -349,26 +389,36 @@ where
         Ok(self.program_counter + 1)
     }
 
+    pub fn interpret_step(&'a mut self) -> Result<(), VMError> {
+        let current_instruction = self
+            .program
+            .instructions()
+            .get(self.program_counter)
+            .clone();
+
+        let hr_instruction = current_instruction
+            .ok_or(VMError::GeneralError {
+                reason: ("Failed getting current instruction".to_string()),
+            })?
+            .clone();
+
+        print!("{}", hr_instruction);
+
+        self.program_counter = self.process_instruction(hr_instruction.clone())?;
+
+        if self.program_counter >= self.program.instructions().len() {
+            return Err(VMError::EndOfProgram);
+        }
+    
+        Ok(())
+    }
+
     pub fn interpret(&'a mut self) -> Result<(), VMError> {
         loop {
-            let current_instruction = self
-                .program
-                .instructions()
-                .get(self.program_counter)
-                .clone();
-
-            let hr_instruction = current_instruction
-                .ok_or(VMError::GeneralError {
-                    reason: ("Failed getting current instruction".to_string()),
-                })?
-                .clone();
-
-            print!("{}", hr_instruction);
-
-            self.program_counter = self.process_instruction(hr_instruction.clone())?;
-
-            if self.program_counter >= self.program.instructions().len() {
-                break;
+            match self.interpret_step() {
+                Ok(_) => (),
+                Err(VMError::EndOfProgram) => break, // All is well, we've reached the end of the program
+                Err(e) => return Err(e),
             }
         }
         println!(); // To add a newline at the end of the output
@@ -479,9 +529,16 @@ mod tests {
 
     #[test]
     fn test_vm_initialization() -> Result<(), Box<dyn std::error::Error>> {
-        let program: Program = test_program_from_file()?;
+        let program = test_program_from_file()?;
         let cell_count = NonZeroUsize::new(10).unwrap();
-        let vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, false);
+
+        // let vm: BrainfuckVM<u8> = BrainfuckVM::new(&program, cell_count, false);
+
+        let vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
         assert_eq!(vm.head, 0);
         assert_eq!(vm.tape.len(), 10);
@@ -496,23 +553,19 @@ mod tests {
         let program = test_program_from_string(&program_string)?;
         let cell_count = NonZeroUsize::new(10).unwrap();
 
-        // Allow growth
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, true);
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(true)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
-        for (instruction_index, hr_instruction) in vm.program.instructions().iter().enumerate() {
-            // Before processing, counter should be the same as index
-            assert_eq!(vm.head, instruction_index);
-            let next_instruction =
-                vm.process_instruction(hr_instruction.to_owned())
-                    .map_err(|err| {
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Error: {}", err),
-                        )) as Box<dyn std::error::Error>
-                    })?;
+        let mut instruction_index = 0;
+        while vm.interpret_step().is_ok()
+        {
             // After processing, counter should have gone up by one
             assert_eq!(vm.head, instruction_index + 1);
-            vm.program_counter = next_instruction;
+            instruction_index += 1
         }
         Ok(())
     }
@@ -521,24 +574,23 @@ mod tests {
     fn test_move_head_left_error() -> Result<(), Box<dyn std::error::Error>> {
         let program = test_program_from_string("<")?;
         let cell_count = NonZeroUsize::new(10).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+    
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(false)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
-        let Some(hr_instruction) = vm.program.instructions().get(0) else {
-            return Err(Box::new(std::io::Error::new(
+        match vm.interpret_step()
+        {
+            Err(VMError::InvalidHeadPosition { position: 0, .. }) => return Ok::<_, Box<dyn std::error::Error>>(()),
+            _ => return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Error: "),
-            )) as Box<dyn std::error::Error>);
+            )) as Box<dyn std::error::Error>)
         };
 
-        match vm.process_instruction(hr_instruction.to_owned()) {
-            Err(VMError::InvalidHeadPosition {
-                position,
-                instruction,
-            }) => Ok(()),
-            _ => panic!(
-                "Expected VMError::InvalidHeadPosition error, but got a different or no error."
-            ),
-        }
     }
 
     #[test]
@@ -548,19 +600,19 @@ mod tests {
         let program = test_program_from_string(&program_string)?;
         let cell_count = NonZeroUsize::new(1).unwrap();
 
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(false)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
-        for (instruction_index, hr_instruction) in vm.program.instructions().iter().enumerate() {
+        let mut expected_cell_value = 0;
+        while vm.interpret_step().is_ok()
+        {
+            expected_cell_value += 1;
             let cell_value = vm.tape.get(vm.head).unwrap();
-
-            assert_eq!(cell_value.to_owned(), instruction_index as u8);
-            vm.process_instruction(hr_instruction.to_owned())
-                .map_err(|err| {
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Error: {}", err),
-                    )) as Box<dyn std::error::Error>
-                })?;
+            assert_eq!(cell_value.to_owned(), expected_cell_value as u8);
         }
 
         Ok(())
@@ -570,27 +622,25 @@ mod tests {
     fn test_decrement_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
         let program = test_program_from_string("-")?;
         let cell_count = NonZeroUsize::new(10).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, false);
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(false)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
-        let Some(hr_instruction) = vm.program.instructions().get(0) else {
-            return Err(Box::new(std::io::Error::new(
+        let expected_cell_value: u8 = 255;
+        match vm.interpret_step() {
+            Ok(_) => return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Error: "),
-            )) as Box<dyn std::error::Error>);
-        };
-
-        vm.process_instruction(hr_instruction.to_owned())
-            .map_err(|err| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Error: {}", err),
-                )) as Box<dyn std::error::Error>
-            })?;
-
-        let cell_value = vm.tape.get(vm.head).unwrap();
-
-        assert_eq!(cell_value.to_owned(), 255);
-
+                "Error: Should have reached end of program".to_string(),
+)           ) as Box<dyn std::error::Error>),
+            Err(VMError::EndOfProgram) => assert_eq!(vm.tape.get(vm.head).unwrap().to_owned(), expected_cell_value),
+            Err(e) => return Err(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("Error: {}", e),
+            )) as Box<dyn std::error::Error>)
+        }
         Ok(())
     }
 
@@ -600,16 +650,28 @@ mod tests {
         let program_string = "+".repeat(overflow_cell_value);
         let program = test_program_from_string(&program_string)?;
         let cell_count = NonZeroUsize::new(1).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::new(&program, cell_count, false);
-
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+            .set_program(program)
+            .set_cell_count(cell_count)
+            .set_allow_growth(false)
+            .build()
+            .map_err(|e| format!("Error: {}", e))?;
+    
         // Only care about final result
-        for hr_instruction in vm.program.instructions().iter() {
-            let _ = vm.process_instruction(hr_instruction.to_owned());
+        loop {
+            match vm.interpret_step() {
+                Ok(_) => (),
+                Err(VMError::EndOfProgram) => 
+                {
+                    assert_eq!(vm.tape.get(vm.head).unwrap().to_owned(), 0);
+                    return Ok(());
+                }
+                Err(e) => return Err(Box::new(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("Error: {}", e),
+                )) as Box<dyn std::error::Error>)
+            };
         }
-        
-        let cell_value = vm.tape.get(vm.head).unwrap();
-        assert_eq!(cell_value.to_owned(), 0);
-        Ok(())
     }
 
     #[test]
@@ -617,7 +679,12 @@ mod tests {
         let max_cell_value = u8::MAX as usize;
         let program = test_program_from_file()?;
         let cell_count = NonZeroUsize::new(1).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(false)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
         for index in 0..max_cell_value {
             let input_data = index as u8;
@@ -641,7 +708,13 @@ mod tests {
         let max_cell_value = u8::MAX as usize;
         let program = test_program_from_file()?;
         let cell_count = NonZeroUsize::new(1).unwrap();
-        let mut vm: BrainfuckVM<'_, u8> = BrainfuckVM::<u8>::new(&program, cell_count, false);
+        let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program(program)
+        .set_cell_count(cell_count)
+        .set_allow_growth(false)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
+
         for index in 0..max_cell_value {
             let output_data = index as u8;
             vm.current_cell()
