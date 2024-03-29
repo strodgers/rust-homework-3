@@ -1,4 +1,5 @@
 use bft_interp::BrainfuckVM;
+use bft_interp::VMBuilder;
 use bft_types::Program;
 use clap::Parser;
 use std::error::Error;
@@ -9,6 +10,7 @@ use std::path::PathBuf;
 mod cli;
 use cli::Cli;
 use std::process;
+use std::io::{Read, Write};
 // TODO: maybe this comment should be on fn main()
 /// Entry point for the Brainfuck interpreter program.
 ///
@@ -54,16 +56,13 @@ struct Args {
 }
 
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    // let program_name = cli.program;
-
     let file = File::open(cli.program)?;
+    let program_file = BufReader::new(file);
 
-    let program = Program::new(BufReader::new(file))?;
-
-    let cell_count: NonZeroUsize =
-        NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
-
-    let mut vm = BrainfuckVM::<u8>::new(&program, cell_count, cli.allow_growth);
+    let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        .set_program_file(program_file)
+        .build()
+        .map_err(|e| format!("Error: {}", e))?;
 
     // Use the interpreter function to print the BF program
     vm.interpret().map_err(|err| {
