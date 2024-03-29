@@ -2,13 +2,16 @@
 //!
 //! This includes capabilities to represent instructions and their provenance,
 //! and to parse programs from files.
+use num_traits::{FromBytes, Num, NumCast};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::fmt::{Debug, Display};
 use std::io::{BufRead, BufReader, Read};
-
-pub trait CellKind {
+pub trait CellKind:
+    Num + NumCast + Copy + PartialEq + Eq + Display + Debug + FromBytes + Default
+{
     type Value;
 
     fn increment(&mut self);
@@ -19,6 +22,9 @@ pub trait CellKind {
     where
         Self: Sized;
     fn to_bytes(&self) -> Vec<u8>;
+    fn bytes_per_cell() -> usize {
+        std::mem::size_of::<Self::Value>()
+    }
 }
 
 impl CellKind for u8 {
@@ -43,7 +49,8 @@ impl CellKind for u8 {
     where
         Self: Sized,
     {
-        Ok(*bytes.get(0).unwrap_or(&0))
+        // Already a u8
+        Ok(bytes[0])
     }
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -162,11 +169,11 @@ impl InstructionPreprocessor {
                 self.stack.push(hr_instruction.index);
             }
             RawInstruction::ConditionalBackward => match self.stack.pop() {
-                Some(start_index) => {
+                Some(matching_bracket) => {
                     self.bracket_positions
-                        .insert(start_index, hr_instruction.index);
+                        .insert(matching_bracket, hr_instruction.index);
                     self.bracket_positions
-                        .insert(hr_instruction.index, start_index);
+                        .insert(hr_instruction.index, matching_bracket);
                 }
                 None => {
                     return Err(format!(
@@ -185,6 +192,7 @@ impl InstructionPreprocessor {
         self.bracket_positions.get(&index).copied()
     }
 }
+
 /// A Brainfuck program.
 ///
 /// This struct holds the filename from which the program was loaded
@@ -252,18 +260,6 @@ impl Program {
     pub fn get_bracket_position(&self, index: usize) -> Option<usize> {
         self.preprocessor.get_bracket_position(index)
     }
-
-    // pub fn next_position<C>(&self, cell_index: usize, cell_value: C) -> Option<&usize>
-    // where
-    // C: CellKind,
-    // {
-    //     if cell_value.get_value() == C::Value::zero() {
-    //         return self.preprocessor.get_bracket_position(cell_index)
-    //     }
-
-    //     cell_index.increment();
-    //     return Some(&cell_index)
-    // }
 }
 
 #[cfg(test)]

@@ -1,10 +1,12 @@
 use bft_types::Program;
 use bft_types::{CellKind, HumanReadableInstruction, RawInstruction};
-use num_traits::{FromBytes, Num, NumCast};
-use std::fmt;
-use std::hash::Hash;
-use std::io::{Read, Write};
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::fmt::{self, Debug};
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read, Write};
 use std::num::NonZeroUsize;
+use std::{cell, io};
 
 #[derive(Debug)]
 pub enum VMError {
@@ -29,6 +31,9 @@ pub enum VMError {
         reason: String,
     },
     TypeError {
+        reason: String,
+    },
+    BuilderError {
         reason: String,
     },
 }
@@ -71,7 +76,133 @@ impl<'a> fmt::Display for VMError {
             VMError::TypeError { reason } => {
                 write!(f, "Type error: {}", reason)
             }
+            VMError::BuilderError { reason } => {
+                write!(f, "Builder error: {}", reason)
+            }
         }
+    }
+}
+
+// const SUPPORTED_CELL_TYPEIDS: HashMap<&TypeId, &str> = {};
+
+#[derive(Default)]
+pub struct VMBuilder<'a, R, W>
+where
+    R: Read,
+    W: Write,
+{
+    cell_kind: Option<TypeId>,
+    cell_count: Option<NonZeroUsize>,
+    allow_growth: Option<bool>,
+    input_reader: Option<Box<R>>,
+    output_writer: Option<Box<W>>,
+    program_reader: Option<Box<dyn Read + 'a>>,
+}
+
+impl<'a, R, W> VMBuilder<'a, R, W>
+where
+    R: Read + 'static,
+    W: Write + 'static,
+{
+    pub fn new() -> Self {
+        VMBuilder {
+            cell_kind: None,
+            cell_count: None,
+            allow_growth: None,
+            input_reader: None,
+            output_writer: None,
+            program_reader: None,
+        }
+    }
+
+    pub fn set_io(mut self, input: R, output: W) -> Self {
+        self.input_reader = Some(Box::new(input));
+        self.output_writer = Some(Box::new(output));
+        self
+    }
+
+    // fn set_program_reader(mut self, mut reader: R + 'static ) -> Self {
+    //     self.program_reader = Some(Box::new(reader));
+    //     self
+    // }
+
+    pub fn set_program_file(mut self, file: File) -> Self {
+        self.program_reader = Some(Box::new(BufReader::new(file)) as Box<dyn Read + 'a>);
+        self
+    }
+
+    pub fn build<N>(self) -> Result<BrainfuckVM<N>, VMError>
+    where
+        N: CellKind,
+        R: Read,
+        W: Write,
+    {
+        // Program must be set somehow
+        let program_reader: Box<dyn Read> = match self.program_reader {
+            Some(reader) => reader,
+            None => {
+                return Err(VMError::BuilderError {
+                    reason: "Program reader must be set.".to_string(),
+                })
+            }
+        };
+
+        // Default IO to use stdin and stdout
+        let input_reader: Box<dyn Read + 'static> = match self.input_reader {
+            Some(reader) => reader,
+            None => {
+                println!("Using default stdin");
+                Box::new(io::stdin().lock())
+            }
+        };
+
+        let output_writer: Box<dyn Write + 'static> = match self.output_writer {
+            Some(reader) => reader,
+            None => {
+                println!("Using default stdout");
+                Box::new(io::stdout().lock())
+            }
+        };
+
+        // If no cell type provided, default to u8
+        let cell_kind: TypeId = self.cell_kind.unwrap_or({
+            println!("Using default cell kind u8");
+            TypeId::of::<u8>()
+        });
+
+        // Must be a supported type
+        // if !SUPPORTED_CELL_TYPEIDS.contains_key(&cell_kind) {
+        //     return Err(VMError::BuilderError {
+        //         reason: format!(
+        //             "Cell type not supported. Supported types: {:?}",
+        //             SUPPORTED_CELL_TYPEIDS.values()
+        //         ),
+        //     });
+        // }
+
+        // If no cell count provided, default to 30,000
+        let cell_count = self.cell_count.unwrap_or({
+            println!("Using default cell count 30000");
+            NonZeroUsize::new(30000).unwrap()
+        });
+
+        // If no allow growth provided, default to false
+        let allow_growth = self.allow_growth.unwrap_or({
+            println!("Using default allow growth false");
+            false
+        });
+
+        let program = Program::new(program_reader).map_err(|err| VMError::BuilderError {
+            reason: format!("Failed to create program: {}", err),
+        })?;
+
+        Ok(BrainfuckVM::new(
+            program,
+            cell_count,
+            allow_growth,
+            input_reader,
+            output_writer,
+        ))
     }
 }
 
@@ -80,28 +211,40 @@ impl<'a> fmt::Display for VMError {
 /// The type for each cell of the Brainfuck tape can be chosen by the
 /// user of the virtual machine.
 // TODO: remove once we're using this properly where
-pub struct BrainfuckVM<'a, N>
+pub struct BrainfuckVM<N>
 where
-    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
+    N: CellKind,
 {
     tape: Vec<N>,
     head: usize,
     allow_growth: bool,
     program_counter: usize,
-    program: &'a Program,
+    program: Program,
+    input_reader: Box<dyn Read>,
+    output_writer: Box<dyn Write>,
 }
 
-impl<'a, N> BrainfuckVM<'a, N>
+impl<'a, N> BrainfuckVM<N>
 where
-    N: Num + NumCast + FromBytes + Eq + Copy + CellKind + Hash + Default,
+    N: CellKind,
 {
-    pub fn new(program: &'a Program, cell_count: NonZeroUsize, allow_growth: bool) -> Self {
+    pub fn new(
+        // mut tape: Vec<N>,
+        program: Program,
+        cell_count: NonZeroUsize,
+        allow_growth: bool,
+        input_reader: Box<dyn Read>,
+        output_writer: Box<dyn Write>,
+    ) -> Self {
         BrainfuckVM {
+            // tape: vec![N::default(); cell_count.get()],
             tape: vec![N::default(); cell_count.get()],
             head: 0,
             allow_growth,
             program_counter: 0,
             program,
+            input_reader,
+            output_writer,
         }
     }
 
@@ -177,13 +320,16 @@ where
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell()?.is_zero() {
-                    // Jump forwards, 1 past the matching closing bracket
+                    // Jump forwards if zero
+                    println!("Jumping to {}", self.get_bracket_position(hr_instruction)?);
                     return Ok(self.get_bracket_position(hr_instruction)?);
                 };
             }
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
                 self.program_counter = self.get_bracket_position(hr_instruction)?;
+                // Subtract 1, since it is only in ConditionalForward that we make an assesment
+                return Ok(self.get_bracket_position(hr_instruction)? - 1);
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
@@ -216,8 +362,6 @@ where
             if self.program_counter >= self.program.instructions().len() {
                 break;
             }
-
-            // self.program_counter = index; // Update the program counter as you go
         }
         println!(); // To add a newline at the end of the output
         Ok(())
@@ -264,10 +408,10 @@ where
     }
 
     pub fn read_value<R: Read>(&mut self, reader: &mut R) -> Result<(), VMError> {
-        let bytes_per_cell = std::mem::size_of::<N>();
-        let mut buffer = vec![0u8; bytes_per_cell];
+        // Create a buffer to read into with the size of one N::Value
+        let mut buffer = vec![0u8; N::bytes_per_cell()];
 
-        // Read as many bytes to fill the buffer with one N::Value
+        // Read as many bytes to fill the buffer
         reader
             .read_exact(&mut buffer)
             .map_err(|e| VMError::IOError {

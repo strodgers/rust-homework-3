@@ -1,4 +1,5 @@
 use bft_interp::BrainfuckVM;
+use bft_interp::VMBuilder;
 use bft_types::Program;
 use clap::Parser;
 use std::error::Error;
@@ -58,12 +59,17 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
 
     let file = File::open(cli.program)?;
 
-    let program = Program::new(BufReader::new(file))?;
+    let vm: BrainfuckVM<u8> = VMBuilder::new()
+        .set_program_file(file)
+        .build()
+        .map_err(|e| "Error".to_string())?;
 
-    let cell_count: NonZeroUsize =
-        NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
+    // let program = Program::new(BufReader::new(file))?;
 
-    let mut vm = BrainfuckVM::<u8>::new(&program, cell_count, cli.allow_growth);
+    // let cell_count: NonZeroUsize =
+    //     NonZeroUsize::new(cli.cell_count).ok_or("Cell count must be a positive integer")?;
+
+    // let mut vm = BrainfuckVM::<u8>::new(&program, cell_count, cli.allow_growth);
 
     // Use the interpreter function to print the BF program
     vm.interpret().map_err(|err| {
