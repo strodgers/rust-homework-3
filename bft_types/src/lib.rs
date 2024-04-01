@@ -126,6 +126,15 @@ impl HumanReadableInstruction {
         }
     }
 
+    pub fn undefined() -> Self {
+        HumanReadableInstruction {
+            instruction: RawInstruction::Undefined,
+            line: 0,
+            column: 0,
+            index: 0,
+        }
+    }
+
     pub fn raw_instruction(&self) -> &RawInstruction {
         &self.instruction
     }
@@ -193,10 +202,12 @@ impl InstructionPreprocessor {
                         .insert(hr_instruction.index, matching_bracket.index);
                 }
                 None => {
-                    return Err(format!(
+                    let err_msg = format!(
                         "Unmatched closing bracket at line {}, column {}",
                         hr_instruction.line, hr_instruction.column
-                    ));
+                    );
+                    log::error!("{}", err_msg); // Log the error
+                    return Err(err_msg); // Also return the error for handling
                 }
             },
             _ => {}
@@ -222,9 +233,9 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new<R: Read>(mut reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
         let mut preprocessor = InstructionPreprocessor::new();
-        let instructions = Self::read_data(&mut reader, &mut preprocessor)?;
+        let instructions = Self::read_data(reader, &mut preprocessor)?;
 
         Ok(Program {
             instructions,
@@ -282,37 +293,7 @@ impl Program {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::{self, File};
-    use std::io::Write;
-    use std::path::PathBuf;
-
-    struct TestFile {
-        path: PathBuf,
-    }
-
-    impl TestFile {
-        fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
-            let path = PathBuf::from(filename);
-            let mut file = File::create(&path)?;
-            writeln!(file, "+-><.,[]")?;
-
-            Ok(TestFile { path })
-        }
-
-        fn path(&self) -> &PathBuf {
-            &self.path
-        }
-    }
-
-    impl Drop for TestFile {
-        fn drop(&mut self) {
-            if let Err(e) = fs::remove_file(&self.path) {
-                eprintln!("Cleanup error: Failed to delete file: {}", e);
-            } else {
-                println!("Cleanup: Test file deleted.");
-            }
-        }
-    }
+    use bft_test_utils::TestFile;
 
     #[test]
     fn test_human_readable_instruction_display() {
@@ -327,73 +308,78 @@ mod tests {
         let result: Result<u8, Box<dyn std::error::Error>> = <u8 as CellKind>::from_bytes(&bytes);
 
         // Asserts to check if the conversion was successful and correct.
-        assert!(result.is_ok(), "Expected Ok(_) from from_bytes but got an Err");
-        assert_eq!(result.unwrap(), 5, "Expected the byte value to be 5 after conversion");
+        assert!(
+            result.is_ok(),
+            "Expected Ok(_) from from_bytes but got an Err"
+        );
+        assert_eq!(
+            result.unwrap(),
+            5,
+            "Expected the byte value to be 5 after conversion"
+        );
     }
-    // #[test]
-    // fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
-    //     let test_file = TestFile::new("test.bf")?;
-    //     let mut preprocessor: &mut InstructionPreprocessor =
-    //         &mut InstructionPreprocessor::new();
-    //     let instructions = Program::read_data(test_file.path().to_owned(), &mut preprocessor)?;
-    //     assert_eq!(instructions.len(), 8);
+    #[test]
+    fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor: &mut InstructionPreprocessor = &mut InstructionPreprocessor::new();
+        let instructions = Program::read_data(TestFile::new()?, &mut preprocessor)?;
+        assert_eq!(instructions.len(), 8);
 
-    //     assert_eq!(
-    //         instructions[0].raw_instruction(),
-    //         &RawInstruction::IncrementByte
-    //     );
-    //     assert_eq!(instructions[0].line, 1);
-    //     assert_eq!(instructions[0].column, 1);
+        assert_eq!(
+            instructions[0].raw_instruction(),
+            &RawInstruction::IncrementByte
+        );
+        assert_eq!(instructions[0].line, 1);
+        assert_eq!(instructions[0].column, 1);
 
-    //     assert_eq!(
-    //         instructions[1].raw_instruction(),
-    //         &RawInstruction::DecrementByte
-    //     );
-    //     assert_eq!(instructions[1].line, 1);
-    //     assert_eq!(instructions[1].column, 2);
+        assert_eq!(
+            instructions[1].raw_instruction(),
+            &RawInstruction::DecrementByte
+        );
+        assert_eq!(instructions[1].line, 1);
+        assert_eq!(instructions[1].column, 2);
 
-    //     assert_eq!(
-    //         instructions[2].raw_instruction(),
-    //         &RawInstruction::IncrementPointer
-    //     );
-    //     assert_eq!(instructions[2].line, 1);
-    //     assert_eq!(instructions[2].column, 3);
+        assert_eq!(
+            instructions[2].raw_instruction(),
+            &RawInstruction::IncrementPointer
+        );
+        assert_eq!(instructions[2].line, 1);
+        assert_eq!(instructions[2].column, 3);
 
-    //     assert_eq!(
-    //         instructions[3].raw_instruction(),
-    //         &RawInstruction::DecrementPointer
-    //     );
-    //     assert_eq!(instructions[3].line, 1);
-    //     assert_eq!(instructions[3].column, 4);
+        assert_eq!(
+            instructions[3].raw_instruction(),
+            &RawInstruction::DecrementPointer
+        );
+        assert_eq!(instructions[3].line, 1);
+        assert_eq!(instructions[3].column, 4);
 
-    //     assert_eq!(
-    //         instructions[4].raw_instruction(),
-    //         &RawInstruction::OutputByte
-    //     );
-    //     assert_eq!(instructions[4].line, 1);
-    //     assert_eq!(instructions[4].column, 5);
+        assert_eq!(
+            instructions[4].raw_instruction(),
+            &RawInstruction::OutputByte
+        );
+        assert_eq!(instructions[4].line, 1);
+        assert_eq!(instructions[4].column, 5);
 
-    //     assert_eq!(
-    //         instructions[5].raw_instruction(),
-    //         &RawInstruction::InputByte
-    //     );
-    //     assert_eq!(instructions[5].line, 1);
-    //     assert_eq!(instructions[5].column, 6);
+        assert_eq!(
+            instructions[5].raw_instruction(),
+            &RawInstruction::InputByte
+        );
+        assert_eq!(instructions[5].line, 1);
+        assert_eq!(instructions[5].column, 6);
 
-    //     assert_eq!(
-    //         instructions[6].raw_instruction(),
-    //         &RawInstruction::ConditionalForward
-    //     );
-    //     assert_eq!(instructions[6].line, 1);
-    //     assert_eq!(instructions[6].column, 7);
+        assert_eq!(
+            instructions[6].raw_instruction(),
+            &RawInstruction::ConditionalForward
+        );
+        assert_eq!(instructions[6].line, 1);
+        assert_eq!(instructions[6].column, 7);
 
-    //     assert_eq!(
-    //         instructions[7].raw_instruction(),
-    //         &RawInstruction::ConditionalBackward
-    //     );
-    //     assert_eq!(instructions[7].line, 1);
-    //     assert_eq!(instructions[7].column, 8);
+        assert_eq!(
+            instructions[7].raw_instruction(),
+            &RawInstruction::ConditionalBackward
+        );
+        assert_eq!(instructions[7].line, 1);
+        assert_eq!(instructions[7].column, 8);
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }

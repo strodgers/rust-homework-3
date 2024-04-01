@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{num::NonZeroUsize, path::PathBuf};
 
 use clap::Parser;
 
@@ -10,9 +10,11 @@ pub struct Cli {
     #[clap(name = "PROGRAM")]
     pub program: PathBuf,
 
-    /// Number of cells in the tape
-    #[clap(short, long, default_value_t = 30000)]
-    pub cell_count: usize,
+    /// Specifies the number of cells in the tape.
+    ///
+    /// Traditionally Brainfuck interpreters use a tape of 30,000 cells.
+    #[arg(short, long)] // Convert Option<NonZeroUsize> to String
+    pub cell_count: Option<NonZeroUsize>,
 
     /// Enable auto-extending tape
     #[clap(short = 'e', long)]
