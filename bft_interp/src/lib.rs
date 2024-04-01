@@ -37,7 +37,10 @@ pub enum VMError {
     BuilderError {
         reason: String,
     },
-    EndOfProgram,
+    EndOfProgram {
+        // TODO: maybe this should be a VMState?
+        program_counter_final: usize,
+    },
 }
 
 // So we can use it with Box dyn Error
@@ -85,8 +88,14 @@ impl<'a> fmt::Display for VMError {
             VMError::BuilderError { reason } => {
                 write!(f, "Builder error: {}", reason)
             }
-            VMError::EndOfProgram => {
-                write!(f, "End of program")
+            VMError::EndOfProgram {
+                program_counter_final,
+            } => {
+                write!(
+                    f,
+                    "End of program, executed {} instructions",
+                    program_counter_final
+                )
             }
         }
     }
@@ -299,6 +308,15 @@ where
         }
     }
 
+    fn current_state(&self) -> Result<VMState<N>, VMError> {
+        Ok(VMState {
+            cell_value: self.current_cell_value()?,
+            head: self.head,
+            program_counter: self.program_counter,
+            current_instruction: self.current_instruction,
+        })
+    }
+
     fn get_bracket_position(
         &'a self,
         hr_instruction: HumanReadableInstruction,
@@ -390,36 +408,38 @@ where
         Ok(self.program_counter + 1)
     }
 
-    pub fn interpret_step(&'a mut self) -> Result<(), VMError> {
+    pub fn interpret_step(&'a mut self) -> Result<VMState<N>, VMError> {
         match self.program.instructions().get(self.program_counter) {
             Some(instruction) => {
                 self.current_instruction = *instruction;
             }
             None => {
-                return Err(VMError::EndOfProgram);
+                return Err(VMError::EndOfProgram {
+                    program_counter_final: self.program_counter,
+                });
             }
         }
 
         log::info!("{}", self.current_instruction);
-
         self.program_counter = self.process_instruction(self.current_instruction)?;
-
-        Ok(())
+        self.current_state()
     }
 
-    pub fn interpret(&'a mut self) -> Result<(), VMError> {
+    pub fn interpret(&'a mut self) -> Result<VMState<N>, VMError> {
         loop {
             match self.interpret_step() {
                 Ok(_) => (),
-                Err(VMError::EndOfProgram) => break, // All is well, we've reached the end of the program
+                Err(VMError::EndOfProgram {
+                    program_counter_final,
+                }) => break, // All is well, we've reached the end of the program
                 Err(e) => return Err(e),
             }
         }
-        Ok(())
+        self.current_state()
     }
 
     fn move_head_left(&mut self) -> Result<(), VMError> {
-        if self.head <= 0 {
+        if self.head == 0 {
             Err(VMError::InvalidHeadPosition {
                 position: self.head,
                 instruction: self.current_instruction,
@@ -432,12 +452,10 @@ where
     }
 
     fn move_head_right(&mut self) -> Result<(), VMError> {
-        self.head += 1;
-        if self.head >= self.tape.len() {
+        if self.head + 1 >= self.tape.len() {
             // Extend the tape if allowed
             if self.allow_growth {
                 self.tape.push(N::default());
-                return Ok(());
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(VMError::InvalidHeadPosition {
@@ -447,6 +465,8 @@ where
                 });
             }
         }
+        self.head += 1;
+
         Ok(())
     }
 
@@ -500,6 +520,48 @@ where
         };
 
         Ok(())
+    }
+
+    pub fn iter<'b>(&'b mut self) -> VMIterator<'b, N> {
+        VMIterator { vm: self }
+    }
+}
+
+// Holds the state of the VM, with relevant information
+pub struct VMState<N>
+where
+    N: CellKind,
+{
+    cell_value: N,
+    head: usize,
+    program_counter: usize,
+    current_instruction: HumanReadableInstruction,
+}
+
+// Iterator object for the VM, so we can use it in loops
+pub struct VMIterator<'a, N>
+where
+    N: CellKind,
+{
+    vm: &'a mut BrainfuckVM<N>,
+}
+
+// Iterate one step at a time and return the Error type.
+// End the iteration (returning None) if the Error type is EndOfProgram
+impl<'a, N> Iterator for VMIterator<'a, N>
+where
+    N: CellKind,
+{
+    type Item = Result<VMState<N>, VMError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.vm.interpret_step() {
+            Ok(result) => Some(Ok(result)),
+            Err(VMError::EndOfProgram {
+                program_counter_final,
+            }) => None,
+            Err(result) => Some(Err(result)),
+        }
     }
 }
 
@@ -582,21 +644,19 @@ mod tests {
 
     #[test]
     fn test_move_head_success() -> Result<(), Box<dyn std::error::Error>> {
-        let number_of_instructions = 100000;
+        let half_way = 100000;
         // Preallocate enough space
-        let mut program_string = String::with_capacity(2 * number_of_instructions);
-        program_string.extend(">".repeat(number_of_instructions).chars());
-        program_string.extend("<".repeat(number_of_instructions).chars());
+        let mut program_string = String::with_capacity(2 * half_way);
+        program_string.extend(">".repeat(half_way).chars());
+        program_string.extend("<".repeat(half_way).chars());
         let mut vm = setup_vm_from_string(&program_string, true, None)?;
 
-        // Go forward number_of_instructions times
-        let mut instruction_index = 0;
-        while instruction_index < number_of_instructions {
-            match vm.interpret_step() {
-                Ok(_) => {
-                    // After eat step, counter should have gone up by one
-                    assert_eq!(vm.head, instruction_index + 1);
-                    instruction_index += 1;
+        // Go forward half_way times
+        for (instruction_index, iteration) in vm.iter().take(half_way).enumerate() {
+            match iteration {
+                Ok(state) => {
+                    // After each step, head should have gone up by one
+                    assert_eq!(state.head, instruction_index + 1);
                 }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
@@ -606,13 +666,13 @@ mod tests {
                 }
             }
         }
-        // Go back again max_cell_index times
-        while instruction_index > 0 {
-            match vm.interpret_step() {
-                Ok(_) => {
-                    // After eat step, counter should have gone up by one
-                    assert_eq!(vm.head, instruction_index - 1);
-                    instruction_index -= 1;
+
+        // Go back again half_way times
+        for (instruction_index, iteration) in vm.iter().enumerate() {
+            match iteration {
+                Ok(state) => {
+                    // After each step, head should have gone down by one
+                    assert_eq!(state.head, (half_way - instruction_index - 1));
                 }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
@@ -620,17 +680,38 @@ mod tests {
                         format!("Error: {}", e),
                     )) as Box<dyn std::error::Error>)
                 }
+            }
+        }
+
+        // Ensure everything ends nicely
+        match vm.interpret_step() {
+            Err(VMError::EndOfProgram {
+                program_counter_final,
+            }) => {
+                assert_eq!(program_counter_final, 2 * half_way);
+            }
+            Ok(_) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Error: Should have reached EndOfProgram",
+                )) as Box<dyn std::error::Error>)
+            }
+            Err(e) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Error: {}", e),
+                )) as Box<dyn std::error::Error>)
             }
         }
         Ok(())
     }
 
     #[test]
-    fn test_move_head_error() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_move_head_left_error() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = "<";
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
-        // Go back one, should be an error
+        // Go back one, should be an error       
         if let Err(VMError::InvalidHeadPosition {
             position, reason, ..
         }) = vm.interpret_step()
@@ -644,7 +725,10 @@ mod tests {
                 )) as Box<dyn std::error::Error>);
             }
         }
-
+        Ok(())
+    }
+    #[test]
+    fn test_move_head_right_error() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = ">";
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
         // Go forward one, should be an error
@@ -675,14 +759,29 @@ mod tests {
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
         // Increment cell value 255 times
-        let mut expected_cell_value = 0;
-        while expected_cell_value < max_cell_value {
-            match vm.interpret_step() {
-                Ok(_) => {
-                    // After eat step, cell value should have gone up by one
-                    expected_cell_value += 1;
-                    let cell_value = vm.tape.get(vm.head).unwrap();
-                    assert_eq!(cell_value.to_owned(), expected_cell_value as u8);
+        for (expected_cell_value, iteration) in vm.iter().take(max_cell_value).enumerate() {
+            match iteration {
+                Ok(state) => {
+                    // After each step, cell value should have gone up by one
+                    assert_eq!(state.cell_value, expected_cell_value as u8 + 1);
+                }
+                Err(e) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Error: {}", e),
+                    )) as Box<dyn std::error::Error>)
+                }
+            }
+        }
+        // Decrement cell value 255 times
+        for (expected_cell_value, iteration) in vm.iter().enumerate() {
+            match iteration {
+                Ok(state) => {
+                    // After each step, cell value should have gone up by one
+                    assert_eq!(
+                        state.cell_value,
+                        (max_cell_value - expected_cell_value - 1) as u8
+                    );
                 }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
@@ -693,21 +792,24 @@ mod tests {
             }
         }
 
-        // Decrement cell value 255 times
-        while expected_cell_value > 0 {
-            match vm.interpret_step() {
-                Ok(_) => {
-                    // After eat step, cell value should have gone up by one
-                    expected_cell_value -= 1;
-                    let cell_value = vm.tape.get(vm.head).unwrap();
-                    assert_eq!(cell_value.to_owned(), expected_cell_value as u8);
-                }
-                Err(e) => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Error: {}", e),
-                    )) as Box<dyn std::error::Error>)
-                }
+        // Ensure everything ends nicely
+        match vm.interpret_step() {
+            Err(VMError::EndOfProgram {
+                program_counter_final,
+            }) => {
+                assert_eq!(program_counter_final, 2 * max_cell_value);
+            }
+            Ok(_) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Error: Should have reached EndOfProgram",
+                )) as Box<dyn std::error::Error>)
+            }
+            Err(e) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Error: {}", e),
+                )) as Box<dyn std::error::Error>)
             }
         }
         Ok(())
@@ -740,23 +842,38 @@ mod tests {
         let program_string = "+".repeat(overflow_cell_value);
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
-        loop {
-            match vm.interpret_step() {
-                Ok(_) => (),
-                Err(VMError::EndOfProgram) => {
-                    // Only care about final result
-                    assert_eq!(vm.tape.get(vm.head).unwrap().to_owned(), 0);
-                    return Ok(());
-                }
+        // Loop through 255 steps, incrementing the cell value
+        for iteration in vm.iter().skip(u8::MAX as usize) {
+            match iteration {
+                Ok(_) => println!("Step executed successfully"),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Error: {}", e),
                     )) as Box<dyn std::error::Error>)
                 }
-            };
+            }
         }
-    }
+
+        // One more step should be EndOfProgram and cell value should have wrapped to 0
+        match vm.interpret_step() {
+            Ok(_) => (),
+            Err(VMError::EndOfProgram {program_counter_final}) => {
+                println!("Reached the end of the program");
+                assert_eq!(program_counter_final, overflow_cell_value);
+                assert_eq!(
+                    vm.tape.get(vm.head).unwrap().to_owned(),
+                    0,
+                    "Cell value should be 0"
+                );
+            },
+            Err(e) => {
+                println!("Error during execution: {}", e);
+            }
+        }
+        Ok(())
+
+        }
 
     #[test]
     fn test_end_of_program() -> Result<(), Box<dyn std::error::Error>> {
@@ -764,8 +881,8 @@ mod tests {
         let program_string = "++-->+<--";
         let mut vm = setup_vm_from_string(&program_string, true, NonZeroUsize::new(1))?;
 
-        for _ in 0..program_string.len() {
-            match vm.interpret_step() {
+        for iteration in vm.iter() {
+            match iteration {
                 Ok(_) => (),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
@@ -778,7 +895,12 @@ mod tests {
 
         // Make sure if we go one further it's EndOfProgram
         match vm.interpret_step() {
-            Err(VMError::EndOfProgram) => (),
+            Err(VMError::EndOfProgram {
+                program_counter_final,
+            }) => 
+            {
+                assert_eq!(program_counter_final, program_string.len());
+            },
             Ok(_) => {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -826,27 +948,46 @@ mod tests {
             .build()
             .map_err(|e| format!("{}", e))?;
 
-        let mut read_index = 0;
-        while vm.interpret_step().is_ok() {
-            let current_cell_value = vm.current_cell_value().map_err(|err| format!("{}", err))?;
+        for (read_index, iteration) in vm.iter().enumerate() {
             let rng_value = buffer[read_index];
-            // Print these out just to be sure
-            log::debug!(
-                "Cell value: {}, RNG value: {}",
-                current_cell_value,
-                rng_value
-            );
-            assert_eq!(
-                current_cell_value, rng_value,
-                "Cell value should match the read value"
-            );
-            read_index += 1;
+            match iteration {
+                Ok(state) => {
+                    // Print these out just to be sure
+                    log::debug!("Cell value: {}, RNG value: {}", state.cell_value, rng_value);
+                    assert_eq!(
+                        state.cell_value, rng_value,
+                        "Cell value should match the read value"
+                    );
+                }
+                Err(e) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("{}", e),
+                    )) as Box<dyn std::error::Error>)
+                }
+            }
         }
-        // To make sure the instructions were actually read
-        assert_eq!(read_index, buffer.len());
 
-
-
+        match vm.interpret_step() {
+            Err(VMError::EndOfProgram {
+                program_counter_final,
+            }) => 
+            {
+                assert_eq!(program_counter_final, number_of_instructions);
+            },
+            Ok(_) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    ("Error: Should have reached EndOfProgram").to_string(),
+                )) as Box<dyn std::error::Error>)
+            }
+            Err(e) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", e),
+                )) as Box<dyn std::error::Error>)
+            }
+        }
 
         Ok(())
     }
