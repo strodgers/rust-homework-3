@@ -153,72 +153,53 @@ impl fmt::Display for HumanReadableInstruction {
 
 #[derive(Debug)]
 struct InstructionPreprocessor {
-    bracket_positions: HashMap<usize, usize>,
-    stack: Vec<HumanReadableInstruction>,
+    open_brackets: Vec<usize>,
+    matched_brackets: Vec<(usize, usize)>
 }
 
 impl InstructionPreprocessor {
     fn new() -> Self {
         InstructionPreprocessor {
-            bracket_positions: HashMap::new(),
-            stack: Vec::new(),
-        }
-    }
-    fn balanced(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        match self.stack.len() {
-            0 => Ok(()),
-            unmatched => {
-                let mut bracket_str = "bracket";
-                if unmatched > 1 {
-                    bracket_str = "brackets";
-                }
-                let mut err = format!("Unmatched opening {}: ", bracket_str);
-
-                for (i, unmatched_bracket) in self.stack.iter().enumerate() {
-                    if i != 0 {
-                        err += ", ";
-                    }
-                    err += &format!(
-                        "line {} column {}",
-                        unmatched_bracket.line, unmatched_bracket.column
-                    );
-                }
-                Err(err.into())
-            }
+            open_brackets: Vec::new(),
+            matched_brackets: Vec::new(),
         }
     }
 
-    fn process(&mut self, hr_instruction: HumanReadableInstruction) -> Result<(), String> {
-        // Map all the bracket positions, error on unmatched closing brackets
+    fn process(&mut self, hr_instruction: HumanReadableInstruction) -> Result<(), Box<dyn std::error::Error>>{
+        let index = hr_instruction.index;
         match hr_instruction.raw_instruction() {
             RawInstruction::ConditionalForward => {
-                self.stack.push(hr_instruction);
+                self.open_brackets.push(index);
             }
-            RawInstruction::ConditionalBackward => match self.stack.pop() {
-                Some(matching_bracket) => {
-                    self.bracket_positions
-                        .insert(matching_bracket.index, hr_instruction.index);
-                    self.bracket_positions
-                        .insert(hr_instruction.index, matching_bracket.index);
-                }
-                None => {
+            RawInstruction::ConditionalBackward => {
+                if let Some(open_bracket) = self.open_brackets.pop() {
+                    self.matched_brackets.push((open_bracket, index));
+                } else {
                     let err_msg = format!(
                         "Unmatched closing bracket at line {}, column {}",
                         hr_instruction.line, hr_instruction.column
                     );
                     log::error!("{}", err_msg); // Log the error
-                    return Err(err_msg); // Also return the error for handling
+                    return Err(err_msg.into()); // Also return the error for handling                
                 }
-            },
+            }
             _ => {}
         }
-
         Ok(())
     }
 
+    // Retrieve the matching bracket's position
     fn get_bracket_position(&self, index: usize) -> Option<usize> {
-        self.bracket_positions.get(&index).copied()
+        self.matched_brackets
+            .iter()
+            .find(|(open, close)| *open == index || *close == index)
+            .map(|(open, close)| if *open == index { *close } else { *open })
     }
+    
+    fn balanced(&self) -> bool {
+        self.open_brackets.is_empty()
+    }
+
 }
 
 /// A Brainfuck program.
@@ -273,12 +254,11 @@ impl Program {
             }
         }
 
-        match preprocessor.balanced() {
-            Ok(()) => Ok(vec),
-            Err(e) => {
-                return Err(e);
-            }
+        if !preprocessor.balanced() {
+            return Err("Unbalanced brackets".into());
         }
+
+        Ok(vec)
     }
 
     pub fn instructions(&self) -> &Vec<HumanReadableInstruction> {
