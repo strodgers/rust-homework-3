@@ -108,7 +108,7 @@ impl fmt::Display for RawInstruction {
 }
 
 // Struct for the human readable instructions which includes a RawInstruction and the line and column index
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct HumanReadableInstruction {
     instruction: RawInstruction,
     line: usize,

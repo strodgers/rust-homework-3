@@ -9,7 +9,10 @@ use std::io::{BufReader, Read, Write};
 use std::num::NonZeroUsize;
 
 #[derive(Debug)]
-pub enum VMError {
+pub enum VMError<N> 
+where
+    N: CellKind
+{
     InvalidHeadPosition {
         position: usize,
         instruction: HumanReadableInstruction,
@@ -38,15 +41,19 @@ pub enum VMError {
         reason: String,
     },
     EndOfProgram {
-        // TODO: maybe this should be a VMState?
-        program_counter_final: usize,
+        final_state: VMState<N>,
     },
 }
 
 // So we can use it with Box dyn Error
-impl std::error::Error for VMError {}
+impl <N>std::error::Error for VMError<N>
+where
+    N: CellKind {}
 
-impl<'a> fmt::Display for VMError {
+impl<'a, N> fmt::Display for VMError<N>
+where
+    N: CellKind
+    {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VMError::InvalidHeadPosition {
@@ -89,19 +96,17 @@ impl<'a> fmt::Display for VMError {
                 write!(f, "Builder error: {}", reason)
             }
             VMError::EndOfProgram {
-                program_counter_final,
+                final_state: final_state,
             } => {
                 write!(
                     f,
-                    "End of program, executed {} instructions",
-                    program_counter_final
+                    "End of program, final state: {}",
+                    final_state
                 )
             }
         }
     }
 }
-
-// const SUPPORTED_CELL_TYPEIDS: HashMap<&TypeId, &str> = {};
 
 #[derive(Default)]
 pub struct VMBuilder<'a, R, W>
@@ -177,7 +182,7 @@ where
         self
     }
 
-    pub fn build<N>(self) -> Result<BrainfuckVM<N>, VMError>
+    pub fn build<N>(self) -> Result<BrainfuckVM<N>, VMError<N>>
     where
         N: CellKind,
         R: Read,
@@ -226,22 +231,6 @@ where
             }
         };
 
-        // If no cell type provided, default to u8
-        let cell_kind: TypeId = self.cell_kind.unwrap_or({
-            log::info!("Using default cell kind u8");
-            TypeId::of::<u8>()
-        });
-
-        // Must be a supported type
-        // if !SUPPORTED_CELL_TYPEIDS.contains_key(&cell_kind) {
-        //     return Err(VMError::BuilderError {
-        //         reason: format!(
-        //             "Cell type not supported. Supported types: {:?}",
-        //             SUPPORTED_CELL_TYPEIDS.values()
-        //         ),
-        //     });
-        // }
-
         // If no cell count provided, default to 30,000
         let cell_count = self.cell_count.unwrap_or({
             log::info!("Using default cell count 30000");
@@ -276,11 +265,12 @@ where
     tape: Vec<N>,
     head: usize,
     allow_growth: bool,
-    program_counter: usize,
+    instruction_index: usize,
     program: Program,
     input_reader: Box<dyn Read>,
     output_writer: Box<dyn Write>,
     current_instruction: HumanReadableInstruction,
+    instructions_processed: usize,
 }
 
 impl<'a, N> BrainfuckVM<N>
@@ -300,27 +290,29 @@ where
             tape: vec![N::default(); cell_count.get()],
             head: 0,
             allow_growth,
-            program_counter: 0,
+            instruction_index: 0,
             program,
             input_reader,
             output_writer,
             current_instruction: HumanReadableInstruction::undefined(),
+            instructions_processed: 0,
         }
     }
 
-    fn current_state(&self) -> Result<VMState<N>, VMError> {
+    fn current_state(&self) -> Result<VMState<N>, VMError<N>> {
         Ok(VMState {
             cell_value: self.current_cell_value()?,
             head: self.head,
-            program_counter: self.program_counter,
-            current_instruction: self.current_instruction,
+            next_instruction_index: self.instruction_index,
+            last_raw_instruction: self.current_instruction.raw_instruction().to_owned(),
+            instructions_processed: self.instructions_processed,
         })
     }
 
     fn get_bracket_position(
         &'a self,
         hr_instruction: HumanReadableInstruction,
-    ) -> Result<usize, VMError> {
+    ) -> Result<usize, VMError<N>> {
         return self
             .program
             .get_bracket_position(hr_instruction.index())
@@ -330,25 +322,25 @@ where
             });
     }
 
-    pub fn current_cell(&mut self) -> Result<&mut N, VMError> {
+    pub fn current_cell(&mut self) -> Result<&mut N, VMError<N>> {
         if let Some(cell) = self.tape.get_mut(self.head) {
             Ok(cell)
         } else {
             Err(VMError::CellOperationError {
                 position: self.head,
-                instruction: self.program.instructions()[self.program_counter],
+                instruction: self.program.instructions()[self.instruction_index],
                 reason: "Cell not found".to_string(),
             })
         }
     }
 
-    pub fn current_cell_value(&self) -> Result<N, VMError> {
+    pub fn current_cell_value(&self) -> Result<N, VMError<N>> {
         if let Some(cell) = self.tape.get(self.head) {
             Ok(cell.to_owned())
         } else {
             Err(VMError::CellOperationError {
                 position: self.head,
-                instruction: self.program.instructions()[self.program_counter],
+                instruction: self.program.instructions()[self.instruction_index],
                 reason: "Cell not found".to_string(),
             })
         }
@@ -357,7 +349,7 @@ where
     fn process_instruction(
         &mut self,
         hr_instruction: HumanReadableInstruction,
-    ) -> Result<usize, VMError> {
+    ) -> Result<usize, VMError<N>> {
         match hr_instruction.raw_instruction() {
             RawInstruction::IncrementPointer => {
                 self.move_head_right()?;
@@ -372,8 +364,7 @@ where
                 self.decrement_cell()?;
             }
             RawInstruction::OutputByte => {
-                let output_writer = std::io::stdout();
-                self.write_value(&mut output_writer.lock())
+                self.write_value()
                     .map_err(|e| VMError::IOError {
                         instruction: hr_instruction,
                         reason: e.to_string(),
@@ -394,7 +385,7 @@ where
             }
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
-                self.program_counter = self.get_bracket_position(hr_instruction)?;
+                self.instruction_index = self.get_bracket_position(hr_instruction)?;
                 // Subtract 1, since it is only in ConditionalForward that we make an assesment
                 return Ok(self.get_bracket_position(hr_instruction)? - 1);
             }
@@ -405,40 +396,38 @@ where
                 });
             }
         }
-        Ok(self.program_counter + 1)
+        Ok(self.instruction_index + 1)
     }
 
-    pub fn interpret_step(&'a mut self) -> Result<VMState<N>, VMError> {
-        match self.program.instructions().get(self.program_counter) {
+    pub fn interpret_step(&'a mut self) -> Result<VMState<N>, VMError<N>> {
+        match self.program.instructions().get(self.instruction_index) {
             Some(instruction) => {
                 self.current_instruction = *instruction;
             }
             None => {
-                return Err(VMError::EndOfProgram {
-                    program_counter_final: self.program_counter,
-                });
+                let mut final_state = self.current_state()?;
+                final_state.last_raw_instruction = self.current_instruction.raw_instruction().to_owned();
+                return Err(VMError::EndOfProgram {final_state});
             }
         }
 
         log::info!("{}", self.current_instruction);
-        self.program_counter = self.process_instruction(self.current_instruction)?;
+        self.instruction_index = self.process_instruction(self.current_instruction)?;
+        self.instructions_processed += 1;
         self.current_state()
     }
 
-    pub fn interpret(&'a mut self) -> Result<VMState<N>, VMError> {
-        loop {
-            match self.interpret_step() {
+    pub fn interpret(&'a mut self) -> Result<VMState<N>, VMError<N>> {
+        for state in self.iter() {
+            match state {
                 Ok(_) => (),
-                Err(VMError::EndOfProgram {
-                    program_counter_final,
-                }) => break, // All is well, we've reached the end of the program
                 Err(e) => return Err(e),
             }
         }
         self.current_state()
     }
 
-    fn move_head_left(&mut self) -> Result<(), VMError> {
+    fn move_head_left(&mut self) -> Result<(), VMError<N>> {
         if self.head == 0 {
             Err(VMError::InvalidHeadPosition {
                 position: self.head,
@@ -451,7 +440,7 @@ where
         }
     }
 
-    fn move_head_right(&mut self) -> Result<(), VMError> {
+    fn move_head_right(&mut self) -> Result<(), VMError<N>> {
         if self.head + 1 == self.tape.len() {
             // Extend the tape if allowed
             if self.allow_growth {
@@ -471,18 +460,18 @@ where
     }
 
     /// Increments the value of the cell pointed to by the head.
-    fn increment_cell(&mut self) -> Result<(), VMError> {
+    fn increment_cell(&mut self) -> Result<(), VMError<N>> {
         self.current_cell()?.increment();
         Ok(())
     }
 
     /// Decrements the value of the cell pointed to by the head.
-    fn decrement_cell(&mut self) -> Result<(), VMError> {
+    fn decrement_cell(&mut self) -> Result<(), VMError<N>> {
         self.current_cell()?.decrement();
         Ok(())
     }
 
-    pub fn read_value(&mut self) -> Result<(), VMError> {
+    pub fn read_value(&mut self) -> Result<(), VMError<N>> {
         // Create a buffer to read into with the size of one N::Value
         let mut buffer = vec![0u8; N::bytes_per_cell()];
 
@@ -490,12 +479,12 @@ where
         self.input_reader
             .read_exact(&mut buffer)
             .map_err(|e| VMError::IOError {
-                instruction: self.program.instructions()[self.program_counter],
+                instruction: self.program.instructions()[self.instruction_index],
                 reason: e.to_string(),
             })?;
 
         let value: N = N::from_bytes(&buffer).map_err(|e| VMError::IOError {
-            instruction: self.program.instructions()[self.program_counter],
+            instruction: self.program.instructions()[self.instruction_index],
             reason: format!("Failed to read cell value from bytes: {}", e),
         })?;
 
@@ -503,17 +492,17 @@ where
         Ok(())
     }
 
-    pub fn write_value<W: Write>(&mut self, writer: &mut W) -> Result<(), VMError> {
+    pub fn write_value(&mut self) -> Result<(), VMError<N>> {
         match N::from(self.current_cell()?.get()) {
-            Some(value) => writer
+            Some(value) => self.output_writer
                 .write_all(&value.to_bytes())
                 .map_err(|e| VMError::IOError {
-                    instruction: self.program.instructions()[self.program_counter],
+                    instruction: self.program.instructions()[self.instruction_index],
                     reason: e.to_string(),
                 })?,
             None => {
                 return Err(VMError::IOError {
-                    instruction: self.program.instructions()[self.program_counter],
+                    instruction: self.program.instructions()[self.instruction_index],
                     reason: ("Failed to read value".to_string()),
                 })
             }
@@ -523,19 +512,38 @@ where
     }
 
     pub fn iter<'b>(&'b mut self) -> VMIterator<'b, N> {
-        VMIterator { vm: self }
+        VMIterator { vm: self, final_state: None }
     }
 }
 
 // Holds the state of the VM, with relevant information
+#[derive(Debug, PartialEq)]
 pub struct VMState<N>
 where
     N: CellKind,
 {
     cell_value: N,
     head: usize,
-    program_counter: usize,
-    current_instruction: HumanReadableInstruction,
+    next_instruction_index: usize,
+    last_raw_instruction: RawInstruction,
+    instructions_processed: usize,
+}
+
+impl<'a, N> fmt::Display for VMState<N>
+where
+    N: CellKind
+    {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Cell value: {}, Head: {}, Instruction index: {}, Instruction: {}, Instructions processed: {}",
+            self.cell_value,
+            self.head,
+            self.next_instruction_index,
+            self.last_raw_instruction,
+            self.instructions_processed
+        )
+    }
 }
 
 // Iterator object for the VM, so we can use it in loops
@@ -544,22 +552,30 @@ where
     N: CellKind,
 {
     vm: &'a mut BrainfuckVM<N>,
+    final_state: Option<VMState<N>>,
 }
-
+impl<'a, N> VMIterator<'a, N>
+where
+    N: CellKind,
+{
+    pub fn final_state(&self) -> Option<&VMState<N>> {
+        self.final_state.as_ref()
+    }
+}
 // Iterate one step at a time and return the Error type.
 // End the iteration (returning None) if the Error type is EndOfProgram
 impl<'a, N> Iterator for VMIterator<'a, N>
 where
     N: CellKind,
 {
-    type Item = Result<VMState<N>, VMError>;
+    type Item = Result<VMState<N>, VMError<N>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.vm.interpret_step() {
             Ok(result) => Some(Ok(result)),
-            Err(VMError::EndOfProgram {
-                program_counter_final,
-            }) => None,
+            Err(VMError::EndOfProgram{ final_state }) =>{
+                self.final_state = Some(final_state);
+                None},
             Err(result) => Some(Err(result)),
         }
     }
@@ -587,12 +603,12 @@ mod tests {
             .try_init();
     }
 
-    // Helper function to setup a test VM with a program from a string and cell growth bool, default cell count
+    // Helper function to setup a test u8 VM with a program from a string and cell growth bool, default cell count
     fn setup_vm_from_string(
         program_string: &str,
         allow_growth: bool,
         cell_count: Option<NonZeroUsize>,
-    ) -> Result<BrainfuckVM<u8>, VMError> {
+    ) -> Result<BrainfuckVM<u8>, VMError<u8>> {
         let program =
             Program::new(Cursor::new(program_string)).map_err(|e| VMError::ProgramError {
                 instruction: HumanReadableInstruction::undefined(),
@@ -622,16 +638,16 @@ mod tests {
     }
 
     // Helper function to ensure a VM has run and completed the required amount of steps
-    fn ensure_vm_ran<N>(mut vm: BrainfuckVM<N>, steps: usize) -> bool
+    fn ensure_vm_final_state<N>(mut vm: BrainfuckVM<N>, expected_state: VMState<N>) -> bool
     where
         N: CellKind,
     {
-        // Move one more step, should reach end of program and steps should equal
-        // the program_counter_final steps
+        // Move one more step, should reach end of program and expected_counter_final should equal
+        // the program_counter_final expected_counter_final
         match vm.interpret_step() {
             Err(VMError::EndOfProgram {
-                program_counter_final,
-            }) => program_counter_final == steps,
+                final_state,
+            }) => final_state == expected_state,
             Ok(_) => false,
             Err(e) => false,
         }
@@ -646,7 +662,7 @@ mod tests {
             assert!(vm.tape.iter().all(|&x| x == 0));
             assert_eq!(vm.head, 0);
             assert_eq!(vm.allow_growth, *allow_growth);
-            assert_eq!(vm.program_counter, 0);
+            assert_eq!(vm.instruction_index, 0);
 
             // TODO: these
             // program: Program,
@@ -671,6 +687,7 @@ mod tests {
         for (instruction_index, iteration) in vm.iter().take(half_way).enumerate() {
             match iteration {
                 Ok(state) => {
+                    assert_eq!(state.last_raw_instruction, RawInstruction::IncrementPointer);
                     // After each step, head should have gone up by one
                     assert_eq!(state.head, instruction_index + 1);
                 }
@@ -687,6 +704,7 @@ mod tests {
         for (instruction_index, iteration) in vm.iter().enumerate() {
             match iteration {
                 Ok(state) => {
+                    assert_eq!(state.last_raw_instruction, RawInstruction::DecrementPointer);
                     // After each step, head should have gone down by one
                     assert_eq!(state.head, (half_way - instruction_index - 1));
                 }
@@ -699,8 +717,14 @@ mod tests {
             }
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, 2 * half_way), true);
+        let expected_state = VMState::<u8>{
+            cell_value: 0,
+            head: 0,
+            next_instruction_index: 2 * half_way,
+            last_raw_instruction: RawInstruction::DecrementPointer,
+            instructions_processed: 2 * half_way,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
         Ok(())
     }
 
@@ -723,6 +747,7 @@ mod tests {
                 )) as Box<dyn std::error::Error>);
             }
         }
+        
         Ok(())
     }
     #[test]
@@ -760,6 +785,7 @@ mod tests {
         for (expected_cell_value, iteration) in vm.iter().take(max_cell_value).enumerate() {
             match iteration {
                 Ok(state) => {
+                    assert_eq!(state.last_raw_instruction, RawInstruction::IncrementByte);
                     // After each step, cell value should have gone up by one
                     assert_eq!(state.cell_value, expected_cell_value as u8 + 1);
                 }
@@ -775,6 +801,7 @@ mod tests {
         for (expected_cell_value, iteration) in vm.iter().enumerate() {
             match iteration {
                 Ok(state) => {
+                    assert_eq!(state.last_raw_instruction, RawInstruction::DecrementByte);
                     // After each step, cell value should have gone up by one
                     assert_eq!(
                         state.cell_value,
@@ -790,8 +817,14 @@ mod tests {
             }
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, 2 * max_cell_value), true);
+        let expected_state = VMState::<u8>{
+            cell_value: 0,
+            head: 0,
+            next_instruction_index: 2 * max_cell_value,
+            last_raw_instruction: RawInstruction::DecrementByte,
+            instructions_processed: 2 * max_cell_value,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
         Ok(())
     }
 
@@ -814,8 +847,6 @@ mod tests {
             }
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, 1), true);
         Ok(())
     }
 
@@ -847,8 +878,14 @@ mod tests {
             }
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, number_of_instructions), true);
+        let expected_state = VMState::<u8>{
+            cell_value: 0,
+            head: 0,
+            next_instruction_index: number_of_instructions,
+            last_raw_instruction: RawInstruction::IncrementByte,
+            instructions_processed: number_of_instructions,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
         Ok(())
     }
 
@@ -857,7 +894,7 @@ mod tests {
         // Don't use any conditional forwards here, easier to define the end
         let program_string = "++-->+<--";
         let number_of_instructions = program_string.len();
-        let mut vm = setup_vm_from_string(&program_string, true, NonZeroUsize::new(1))?;
+        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(2))?;
 
         for iteration in vm.iter() {
             match iteration {
@@ -871,8 +908,14 @@ mod tests {
             };
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, number_of_instructions), true);
+        let expected_state = VMState::<u8>{
+            cell_value: 254,
+            head: 0,
+            next_instruction_index: number_of_instructions,
+            last_raw_instruction: RawInstruction::DecrementByte,
+            instructions_processed: number_of_instructions,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
 
         Ok(())
     }
@@ -885,12 +928,8 @@ mod tests {
         // Preallocate enough space
         let mut program_string = String::with_capacity(number_of_instructions);
         program_string.extend(",".repeat(number_of_instructions).chars());
-        let program =
-            Program::new(Cursor::new(program_string)).map_err(|e| VMError::ProgramError {
-                instruction: HumanReadableInstruction::undefined(),
-                reason: e.to_string(),
-            })?;
         let cell_count = NonZeroUsize::new(1);
+        let program = Program::new(Cursor::new(program_string))?;
 
         // Generate some random u8 values
         let mut rng = rand::thread_rng();
@@ -926,8 +965,14 @@ mod tests {
             }
         }
 
-        // Ensure everything ends nicely
-        assert_eq!(ensure_vm_ran(vm, number_of_instructions), true);
+        let expected_state = VMState::<u8>{
+            cell_value: buffer[number_of_instructions - 1],
+            head: 0,
+            next_instruction_index: number_of_instructions,
+            last_raw_instruction: RawInstruction::InputByte,
+            instructions_processed: number_of_instructions,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
 
         Ok(())
     }
@@ -936,24 +981,25 @@ mod tests {
     fn test_output_success() -> Result<(), Box<dyn std::error::Error>> {
         setup_logging();
 
-        let number_of_instructions = 20000;
+        // Create a VM, then assign a vector of random values to it's tape.
+        // Go through and check each value is read correctly.
+        let number_of_reads = 10000;
+        // Use one less move so the vm head doesn't go over the cell count
+        let number_of_moves = number_of_reads - 1;
+        let number_of_instructions = number_of_reads + number_of_moves;
+    
         // Preallocate enough space
         let mut program_string = String::with_capacity(number_of_instructions);
-        // Read a value then move right one, so once we set the tape values we can read
-        // from them all
-        program_string.extend(".>".repeat(number_of_instructions / 2).chars());
-        // Remove the final >
+        program_string.extend(".>".repeat(number_of_reads).chars());
+        // Remove the final > so we don't go over the cell count
         program_string.pop();
-        let program =
-            Program::new(Cursor::new(program_string)).map_err(|e| VMError::ProgramError {
-                instruction: HumanReadableInstruction::undefined(),
-                reason: e.to_string(),
-            })?;
-        let cell_count = NonZeroUsize::new(number_of_instructions);
+        let program = Program::new(Cursor::new(program_string))?;
+        let cell_count = NonZeroUsize::new(number_of_moves);
 
         // Generate some random u8 values
         let mut rng = rand::thread_rng();
-        let mut buffer = vec![0u8; number_of_instructions];
+        // Only half of the instructions are output, so we only need half the buffer size (rounded down)
+        let mut buffer = vec![0u8; number_of_reads];
         rng.fill(&mut buffer[..]);
 
         let output_buffer: Vec<u8> = Vec::new(); // Initialize an empty Vec<u8>
@@ -974,6 +1020,7 @@ mod tests {
         for (output_index, iteration) in vm.iter().step_by(2).enumerate() {
             match iteration {
                 Ok(state) => {
+                    assert_eq!(state.last_raw_instruction, RawInstruction::OutputByte);
                     let rng_value = buffer[output_index];
                     // Print these out just to be sure
                     log::debug!("Cell value: {}, RNG value: {}", state.cell_value, rng_value);
@@ -990,11 +1037,94 @@ mod tests {
                 }
             }
         }
+        
+        let expected_state = VMState::<u8>{
+            cell_value: buffer.pop().unwrap(),
+            head: number_of_moves,
+            next_instruction_index: number_of_instructions,
+            last_raw_instruction: RawInstruction::OutputByte,
+            instructions_processed: number_of_instructions,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
+        Ok(())
+    }
 
-        // Ensure everything ends nicely
-        // Subtract 1 because we popped a > from the program_string
-        assert_eq!(ensure_vm_ran(vm, number_of_instructions - 1), true);
+    #[test]
+    fn test_conditional_forward_backward_success() -> Result<(), Box<dyn std::error::Error>> {
+        setup_logging();
+
+        let program_string = "
+        ++       // Increment the first cell to 2
+        [        // Begin a loop that runs while the current cell's value is not zero
+         -       // Decrement the current cell
+        ]        // End the loop only after the decrement has happened twice
+        ";
+        let mut vm = setup_vm_from_string(&program_string, true, None)?;
+
+        // First two iterations should increment the first cell, instruction_index goes up normally
+        let mut state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::IncrementByte);
+        assert!(state.cell_value == 1);
+        assert!(state.next_instruction_index == 1);
+
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::IncrementByte);
+        assert!(state.cell_value == 2);
+        assert!(state.next_instruction_index == 2);
+
+        // The loop should be entered, instruction_index goes up normally
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::ConditionalForward);
+        assert!(state.cell_value == 2);
+        assert!(state.next_instruction_index == 3);
+
+        // Next instruction should decrement the cell, instruction_index goes up normally
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::DecrementByte);
+        assert!(state.cell_value == 1);
+        assert!(state.next_instruction_index == 4);
+
+        // Jump back to the beginning of the loop
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::ConditionalBackward);
+        assert!(state.cell_value == 1);
+        assert!(state.next_instruction_index == 2);
+
+        // Cell value is still non-zero, so enter the loop again
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::ConditionalForward);
+        assert!(state.cell_value == 1);
+        assert!(state.next_instruction_index == 3);
+
+        // Decrement the cell again
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::DecrementByte);
+        assert!(state.cell_value == 0);
+        assert!(state.next_instruction_index == 4);
+
+        // Jump back to the beginning of the loop
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::ConditionalBackward);
+        assert!(state.cell_value == 0);
+        assert!(state.next_instruction_index == 2);
+
+        // Now the cell value is 0, so the loop should be exited
+        state = vm.interpret_step()?;
+        assert!(state.last_raw_instruction == RawInstruction::ConditionalForward);
+        assert!(state.cell_value == 0);
+        assert!(state.next_instruction_index == 5);
+
+        let expected_state = VMState::<u8>{
+            cell_value: 0,
+            head: 0,
+            next_instruction_index: 5,
+            last_raw_instruction: RawInstruction::ConditionalForward,
+            instructions_processed: 9,
+        };
+        assert!(ensure_vm_final_state(vm, expected_state));
 
         Ok(())
     }
+    
+
 }
