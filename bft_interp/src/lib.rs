@@ -51,7 +51,7 @@ where
 }
 
 // So we can use it with Box dyn Error
-impl<'a, N> std::error::Error for VMError<N> where N: CellKind {}
+impl<N> std::error::Error for VMError<N> where N: CellKind {}
 
 impl<N> fmt::Display for VMError<N>
 where
@@ -325,7 +325,7 @@ where
     fn current_state(&mut self) -> Option<VMState<N>> {
         if self.report_state {
             let cell_value = match self.current_cell() {
-                Ok(value) => Some(value.clone()),
+                Ok(value) => Some(*value),
                 Err(_) => None,
             }?;
 
@@ -377,7 +377,7 @@ where
         }
     }
 
-    fn process_instruction<'b>(
+    fn process_instruction(
         &mut self,
         hr_instruction: HumanReadableInstruction,
     ) -> Result<(), VMError<N>> {
@@ -470,12 +470,11 @@ where
         }
 
         // Get the instruction at the current index.
-        let instruction = self
+        let instruction = *self
             .program
             .instructions()
             .get(self.instruction_index)
-            .expect("Failed to get instruction; index out of bounds.")
-            .clone();
+            .expect("Failed to get instruction; index out of bounds.");
         // Handle anything that might need mutation
         self.process_instruction(instruction)?;
 
@@ -534,7 +533,7 @@ where
         }
     }
 
-    fn move_head_right<'b>(&mut self) -> Result<(), ()> {
+    fn move_head_right(&mut self) -> Result<(), ()> {
         if self.head + 1 == self.tape.len() {
             // Extend the tape if allowed
             if self.allow_growth {
@@ -554,9 +553,9 @@ where
         match self.current_cell() {
             Ok(cell) => {
                 cell.increment();
-                return Ok(());
+                Ok(())
             }
-            Err(_) => return Err(()),
+            Err(_) => Err(()),
         }
     }
 
@@ -565,9 +564,9 @@ where
         match self.current_cell() {
             Ok(cell) => {
                 cell.decrement();
-                return Ok(());
+                Ok(())
             }
-            Err(_) => return Err(()),
+            Err(_) => Err(()),
         }
     }
 
@@ -613,7 +612,7 @@ where
     }
 
     // Returns an iterator that allows stepping through the program execution
-    pub fn iter<'b>(&'b mut self) -> VMIterator<'b, N> {
+    pub fn iter(&mut self) -> VMIterator<'_, N> {
         VMIterator {
             vm: self,
             final_state: None,
@@ -631,7 +630,7 @@ where
     state: VMState<N>,
     tape: Vec<N>,
 }
-impl<'a, N> fmt::Display for VMStateFinal<N>
+impl<N> fmt::Display for VMStateFinal<N>
 where
     N: CellKind + fmt::Display, // Ensure N implements fmt::Display for direct printing
 {
@@ -667,7 +666,7 @@ where
     instructions_processed: usize,
 }
 
-impl<'a, N> VMState<N>
+impl<N> VMState<N>
 where
     N: CellKind,
 {
@@ -676,7 +675,7 @@ where
     }
 }
 
-impl<'a, N> fmt::Display for VMState<N>
+impl<N> fmt::Display for VMState<N>
 where
     N: CellKind,
 {

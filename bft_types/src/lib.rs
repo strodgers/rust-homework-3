@@ -121,7 +121,7 @@ impl HumanReadableInstruction {
             instruction,
             line: line + 1,
             column: column + 1,
-            index: index,
+            index,
         }
     }
 
@@ -242,17 +242,14 @@ impl Program {
 
             // Go through each character
             for (col_idx, c) in line.chars().enumerate() {
-                match RawInstruction::from_char(&c).ok_or("Invalid character") {
-                    Ok(instruction) => {
+                if let Ok(instruction) = RawInstruction::from_char(&c).ok_or("Invalid character") {
+                    {
                         index += 1;
                         let hr_instruction: HumanReadableInstruction =
                             HumanReadableInstruction::new(instruction, line_idx, col_idx, index);
-                        if let Err(e) = preprocessor.process(hr_instruction) {
-                            return Err(e.into());
-                        }
+                        preprocessor.process(hr_instruction)?;
                         vec.push(hr_instruction);
                     }
-                    Err(_) => {}
                 }
             }
         }
