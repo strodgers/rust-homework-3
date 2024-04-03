@@ -3,3 +3,4 @@ Cargo.lock
 test.bf
 .vscode
 *-homework.*
+perf.data*

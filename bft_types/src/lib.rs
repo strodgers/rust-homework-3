@@ -4,7 +4,6 @@
 //! and to parse programs from files.
 use num_traits::{FromBytes, Num, NumCast};
 use std::cmp::PartialEq;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Display};
@@ -126,13 +125,15 @@ impl HumanReadableInstruction {
         }
     }
 
-    pub fn undefined() -> Self {
-        HumanReadableInstruction {
+    pub fn undefined() -> HumanReadableInstruction {
+        // Static so we can use it as a default value and when we need to error out
+        static UNDEFINED: HumanReadableInstruction = HumanReadableInstruction {
             instruction: RawInstruction::Undefined,
             line: 0,
             column: 0,
             index: 0,
-        }
+        };
+        UNDEFINED
     }
 
     pub fn raw_instruction(&self) -> &RawInstruction {
@@ -147,14 +148,14 @@ impl HumanReadableInstruction {
 // Nice display string
 impl fmt::Display for HumanReadableInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{} {}\n", self.line, self.column, self.instruction)
+        write!(f, "{}:{} {}", self.line, self.column, self.instruction)
     }
 }
 
 #[derive(Debug)]
 struct InstructionPreprocessor {
     open_brackets: Vec<usize>,
-    matched_brackets: Vec<(usize, usize)>
+    matched_brackets: Vec<(usize, usize)>,
 }
 
 impl InstructionPreprocessor {
@@ -165,7 +166,10 @@ impl InstructionPreprocessor {
         }
     }
 
-    fn process(&mut self, hr_instruction: HumanReadableInstruction) -> Result<(), Box<dyn std::error::Error>>{
+    fn process(
+        &mut self,
+        hr_instruction: HumanReadableInstruction,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let index = hr_instruction.index;
         match hr_instruction.raw_instruction() {
             RawInstruction::ConditionalForward => {
@@ -180,7 +184,7 @@ impl InstructionPreprocessor {
                         hr_instruction.line, hr_instruction.column
                     );
                     log::error!("{}", err_msg); // Log the error
-                    return Err(err_msg.into()); // Also return the error for handling                
+                    return Err(err_msg.into()); // Also return the error for handling
                 }
             }
             _ => {}
@@ -195,11 +199,10 @@ impl InstructionPreprocessor {
             .find(|(open, close)| *open == index || *close == index)
             .map(|(open, close)| if *open == index { *close } else { *open })
     }
-    
+
     fn balanced(&self) -> bool {
         self.open_brackets.is_empty()
     }
-
 }
 
 /// A Brainfuck program.
@@ -273,12 +276,12 @@ impl Program {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bft_test_utils::TestFile;
+    use bft_test_utils::{TestFile, TEST_FILE_NUM_INSTRUCTIONS};
 
     #[test]
     fn test_human_readable_instruction_display() {
         let instruction = HumanReadableInstruction::new(RawInstruction::IncrementByte, 0, 0, 0);
-        assert_eq!(format!("{}", instruction), "1:1 Increment Byte (+)\n");
+        assert_eq!(format!("{}", instruction), "1:1 Increment Byte (+)");
     }
 
     #[test]
@@ -302,63 +305,44 @@ mod tests {
     fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
         let mut preprocessor: &mut InstructionPreprocessor = &mut InstructionPreprocessor::new();
         let instructions = Program::read_data(TestFile::new()?, &mut preprocessor)?;
-        assert_eq!(instructions.len(), 8);
+        assert_eq!(instructions.len(), TEST_FILE_NUM_INSTRUCTIONS);
 
-        assert_eq!(
-            instructions[0].raw_instruction(),
-            &RawInstruction::IncrementByte
-        );
-        assert_eq!(instructions[0].line, 1);
-        assert_eq!(instructions[0].column, 1);
+        // "+[-[<<[+[--->]-[<<<]]]>>>-]"
+        let all_instructions = [
+            RawInstruction::IncrementByte,       // +
+            RawInstruction::ConditionalForward,  // [
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::ConditionalForward,  // [
+            RawInstruction::DecrementPointer,    // <
+            RawInstruction::DecrementPointer,    // <
+            RawInstruction::ConditionalForward,  // [
+            RawInstruction::IncrementByte,       // +
+            RawInstruction::ConditionalForward,  // [
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::IncrementPointer,    // >
+            RawInstruction::ConditionalBackward, // ]
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::ConditionalForward,  // [
+            RawInstruction::DecrementPointer,    // <
+            RawInstruction::DecrementPointer,    // <
+            RawInstruction::DecrementPointer,    // <
+            RawInstruction::ConditionalBackward, // ]
+            RawInstruction::ConditionalBackward, // ]
+            RawInstruction::ConditionalBackward, // ]
+            RawInstruction::IncrementPointer,    // >
+            RawInstruction::IncrementPointer,    // >
+            RawInstruction::IncrementPointer,    // >
+            RawInstruction::DecrementByte,       // -
+            RawInstruction::ConditionalBackward, // ]
+        ];
 
-        assert_eq!(
-            instructions[1].raw_instruction(),
-            &RawInstruction::DecrementByte
-        );
-        assert_eq!(instructions[1].line, 1);
-        assert_eq!(instructions[1].column, 2);
-
-        assert_eq!(
-            instructions[2].raw_instruction(),
-            &RawInstruction::IncrementPointer
-        );
-        assert_eq!(instructions[2].line, 1);
-        assert_eq!(instructions[2].column, 3);
-
-        assert_eq!(
-            instructions[3].raw_instruction(),
-            &RawInstruction::DecrementPointer
-        );
-        assert_eq!(instructions[3].line, 1);
-        assert_eq!(instructions[3].column, 4);
-
-        assert_eq!(
-            instructions[4].raw_instruction(),
-            &RawInstruction::OutputByte
-        );
-        assert_eq!(instructions[4].line, 1);
-        assert_eq!(instructions[4].column, 5);
-
-        assert_eq!(
-            instructions[5].raw_instruction(),
-            &RawInstruction::InputByte
-        );
-        assert_eq!(instructions[5].line, 1);
-        assert_eq!(instructions[5].column, 6);
-
-        assert_eq!(
-            instructions[6].raw_instruction(),
-            &RawInstruction::ConditionalForward
-        );
-        assert_eq!(instructions[6].line, 1);
-        assert_eq!(instructions[6].column, 7);
-
-        assert_eq!(
-            instructions[7].raw_instruction(),
-            &RawInstruction::ConditionalBackward
-        );
-        assert_eq!(instructions[7].line, 1);
-        assert_eq!(instructions[7].column, 8);
+        for (i, instruction) in instructions.iter().enumerate() {
+            assert_eq!(instruction.raw_instruction(), &all_instructions[i]);
+            assert_eq!(instruction.line, 1);
+            assert_eq!(instruction.column, i + 1);
+        }
 
         Ok(())
     }

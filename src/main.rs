@@ -6,8 +6,6 @@ use std::any::TypeId;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
 mod cli;
 use cli::Cli;
 use std::process;
@@ -53,23 +51,22 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
         .set_allow_growth(cli.allow_growth)
         .set_cell_count(cli.cell_count)
         .set_cell_kind(TypeId::of::<u8>())
+        .set_report_state(cli.report_state)
         .build()
         .map_err(|e| format!("Error: {}", e))?;
 
     // Use the interpret function to print the BF program
-    match vm.interpret()
-    {
-        Ok(final_state) =>
-        {
+    match vm.interpret() {
+        Ok(final_state) => {
+            if cli.report_state {
+                log::info!("Final state:\n{}", final_state);
+            }
             Ok(())
-        },
-        Err(err) =>
-        {
-            Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Error: {}", err),
-            )) as Box<dyn std::error::Error>)
         }
+        Err(err) => Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Error: {}", err),
+        )) as Box<dyn std::error::Error>),
     }
 }
 

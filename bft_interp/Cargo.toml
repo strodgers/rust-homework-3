@@ -10,8 +10,8 @@ bft_types = { path = "../bft_types" }
 byte-strings = "0.3.1"
 num-traits = "0.2.18"
 log = "0.4.21"
-rand = "0.8.5"
 env_logger = "0.11.3"
 
 [dev-dependencies]
 bft_test_utils = { path = "../bft_test_utils" }
+rand = "0.8.5"

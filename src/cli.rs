@@ -19,4 +19,8 @@ pub struct Cli {
     /// Enable auto-extending tape
     #[clap(short = 'e', long)]
     pub allow_growth: bool,
+
+    // Enable state reporting
+    #[clap(short = 's', long)]
+    pub report_state: bool,
 }
