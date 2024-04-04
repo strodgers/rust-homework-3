@@ -1,6 +1,6 @@
 //! # Brainfuck Program Representation and State Management
 //!
-//! This crate provides utilities for representing, parsing, and managing the state of
+//! Provides utilities for representing, parsing, and managing the state of
 //! Brainfuck programs. It covers a range of functionalities from the basic representation
 //! of instructions to the execution state of a Brainfuck virtual machine.
 //!
