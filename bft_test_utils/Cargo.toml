@@ -7,3 +7,9 @@ edition = "2021"
 
 [dependencies]
 tempfile = "3.10.0"
+log = "0.4.21"
+env_logger = "0.11.3"
+
+[dev-dependencies]
+bft_types = { path = "../bft_types" }
+bft_interp = { path = "../bft_interp" }

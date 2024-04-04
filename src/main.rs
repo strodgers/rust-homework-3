@@ -1,5 +1,4 @@
-use bft_interp::BrainfuckVM;
-use bft_interp::VMBuilder;
+use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
 use clap::Parser;
 use log::LevelFilter;
 use std::any::TypeId;

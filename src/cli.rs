@@ -2,7 +2,7 @@ use std::{num::NonZeroUsize, path::PathBuf};
 
 use clap::Parser;
 
-/// This doc comment acts as a help display for the CLI.
+/// Handle CLI arguments for bft
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct Cli {

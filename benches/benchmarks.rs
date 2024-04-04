@@ -2,8 +2,8 @@ use std::any::TypeId;
 use std::fs::File;
 use std::io::BufReader;
 
-use bft_interp::{BrainfuckVM, VMBuilder};
-
+use bft_interp::vm::BrainfuckVM;
+use bft_interp::vm_builder::VMBuilder;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 fn my_benchmark_function(c: &mut Criterion) {
