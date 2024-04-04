@@ -16,7 +16,7 @@ fn interpreter_throughput(c: &mut Criterion) {
 
     c.bench_function("hello_world", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program(
                     Program::new(Cursor::new(program_string)).expect("Failed creating program"),
                 )
@@ -34,7 +34,7 @@ fn fixed_memory(c: &mut Criterion) {
     let program_string = ">".repeat(30000 - 1) + "+";
     c.bench_function("fixed_memory", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program(
                     Program::new(Cursor::new(black_box(&program_string)))
                         .expect("Failed creating program"),
@@ -53,7 +53,7 @@ fn memory_growth(c: &mut Criterion) {
     let program_string = ">".repeat(120000 - 3) + "+";
     c.bench_function("memory_growth", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program(
                     Program::new(Cursor::new(black_box(&program_string)))
                         .expect("Failed creating program"),
@@ -72,7 +72,7 @@ fn nested_loops(c: &mut Criterion) {
         "[[[[[[[[[[-]>]>>>>]<<<<<<]>>>>>>]<<<<<<<<<]>>>>>>>>>]<<<<<<<<<<]>>>>>>>>>>>]<<<<<<<<<<<]";
     c.bench_function("nested_loops", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program(
                     Program::new(Cursor::new(black_box(&program_string)))
                         .expect("Failed creating program"),
@@ -90,7 +90,7 @@ fn long_program(c: &mut Criterion) {
     // Using NullWriter because this program spits loads of stuff out
     c.bench_function("long_program", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, NullWriter>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, NullWriter>::new()
                 .set_program_file(BufReader::new(
                     File::open("benches/fib.bf").expect("Could not find file"),
                 ))

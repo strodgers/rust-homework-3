@@ -361,11 +361,7 @@ mod vm_tests {
     use env_logger;
     use log::LevelFilter;
     use rand::Rng;
-    use std::{
-        fs::File,
-        io::{BufReader, Cursor},
-        num::NonZeroUsize,
-    };
+    use std::{io::Cursor, num::NonZeroUsize};
 
     // Setup logging for any tests that it might be useful for
     pub fn setup_logging() {
@@ -388,7 +384,7 @@ mod vm_tests {
                 instruction: HumanReadableInstruction::undefined(),
                 reason: "Failed creating new test Program".to_string(),
             })?;
-        let vm = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
             .set_program(program)
             .set_cell_count(cell_count)
             .set_allow_growth(allow_growth) // default or test-specific value
@@ -404,7 +400,7 @@ mod vm_tests {
     ) -> Result<BrainfuckVM<u8>, Box<dyn std::error::Error>> {
         let testfile = TestFile::new()?;
         let program = Program::new(testfile)?;
-        let vm = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+        let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
             .set_program(program)
             .set_allow_growth(allow_growth)
             .set_cell_count(cell_count)
