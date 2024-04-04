@@ -5,10 +5,10 @@ use std::num::NonZeroUsize;
 
 use bft_interp::vm::BrainfuckVM;
 use bft_interp::vm_builder::VMBuilder;
+use bft_test_utils::NullWriter;
 use bft_types::bf_program::Program;
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
-use bft_test_utils::NullWriter;
 
 fn interpreter_throughput(c: &mut Criterion) {
     // Just do a hello world program
@@ -35,7 +35,10 @@ fn fixed_memory(c: &mut Criterion) {
     c.bench_function("fixed_memory", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
-                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_program(
+                    Program::new(Cursor::new(black_box(&program_string)))
+                        .expect("Failed creating program"),
+                )
                 .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
                 .build()
                 .unwrap();
@@ -51,7 +54,10 @@ fn memory_growth(c: &mut Criterion) {
     c.bench_function("memory_growth", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
-                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_program(
+                    Program::new(Cursor::new(black_box(&program_string)))
+                        .expect("Failed creating program"),
+                )
                 .set_allow_growth(true)
                 .build()
                 .unwrap();
@@ -60,14 +66,17 @@ fn memory_growth(c: &mut Criterion) {
     });
 }
 
-fn nested_loops(c: &mut Criterion)
-{
+fn nested_loops(c: &mut Criterion) {
     // Lots of nested loops
-    let program_string = "[[[[[[[[[[-]>]>>>>]<<<<<<]>>>>>>]<<<<<<<<<]>>>>>>>>>]<<<<<<<<<<]>>>>>>>>>>>]<<<<<<<<<<<]";
+    let program_string =
+        "[[[[[[[[[[-]>]>>>>]<<<<<<]>>>>>>]<<<<<<<<<]>>>>>>>>>]<<<<<<<<<<]>>>>>>>>>>>]<<<<<<<<<<<]";
     c.bench_function("nested_loops", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
-                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_program(
+                    Program::new(Cursor::new(black_box(&program_string)))
+                        .expect("Failed creating program"),
+                )
                 .set_allow_growth(true)
                 .build()
                 .unwrap();
@@ -76,14 +85,15 @@ fn nested_loops(c: &mut Criterion)
     });
 }
 
-fn long_program(c: &mut Criterion)
-{
+fn long_program(c: &mut Criterion) {
     // Fibonacci sequence
     // Using NullWriter because this program spits loads of stuff out
     c.bench_function("long_program", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, NullWriter>::new()
-                .set_program_file(BufReader::new(File::open("benches/fib.bf").expect("Could not find file")))
+                .set_program_file(BufReader::new(
+                    File::open("benches/fib.bf").expect("Could not find file"),
+                ))
                 .set_allow_growth(true)
                 .set_output(NullWriter)
                 .build()
@@ -96,7 +106,13 @@ fn long_program(c: &mut Criterion)
 criterion_group!(memory_benchmarks, fixed_memory, memory_growth);
 criterion_group!(complexity_benchmarks, nested_loops, long_program);
 criterion_group!(throughput_benchmarks, interpreter_throughput);
-criterion_group!(all_benchmarks, fixed_memory, memory_growth, nested_loops, long_program, interpreter_throughput);
+criterion_group!(
+    all_benchmarks,
+    fixed_memory,
+    memory_growth,
+    nested_loops,
+    long_program,
+    interpreter_throughput
+);
 
 criterion_main!(all_benchmarks);
-
