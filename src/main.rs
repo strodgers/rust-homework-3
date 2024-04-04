@@ -3,50 +3,20 @@ use clap::Parser;
 use log::LevelFilter;
 use std::any::TypeId;
 use std::error::Error;
-use std::fs::File;
-use std::io::BufReader;
 mod cli;
 use cli::Cli;
 use std::process;
-// TODO: maybe this comment should be on fn main()
-/// Entry point for the Brainfuck interpreter program.
-///
-/// This program reads a filename from the command line, loads a Brainfuck program from that file,
-/// and then interprets it using a Brainfuck virtual machine.
-///
-/// # Arguments
-///
-/// Reads command-line arguments to get the filename of the Brainfuck program to interpret.
-///
-/// # Errors
-///
-/// Returns an error if no filename is provided or if there are issues with reading or interpreting the program file.
-///
-/// # Examples
-///
-/// Run the program from the command line with:
-/// ```bash
-/// cargo run -- example.bf
-/// ```
-/// Replace `example.bf` with the path to your Brainfuck program file.
-///
-/// # Remarks
-///
-/// The Brainfuck program is interpreted by printing the instructions to the console.
-/// Future implementations may include execution of the Brainfuck program.
 
+/// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    let test_log_level = LevelFilter::Info;
+    let test_log_level = LevelFilter::Warn;
     let _ = env_logger::builder()
         .is_test(true)
         .filter(None, test_log_level)
         .try_init();
 
-    let file = File::open(cli.program)?;
-    let program_file = BufReader::new(file);
-
-    let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
-        .set_program_file(program_file)
+    let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+        .set_program_file(cli.program)
         .set_allow_growth(cli.allow_growth)
         .set_cell_count(cli.cell_count)
         .set_cell_kind(TypeId::of::<u8>())
@@ -54,7 +24,6 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
         .build()
         .map_err(|e| format!("Error: {}", e))?;
 
-    // Use the interpret function to print the BF program
     match vm.interpret() {
         Ok(final_state) => {
             if cli.report_state {
@@ -69,6 +38,21 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     }
 }
 
+/// Entry point for the interpreter program.
+///
+/// Reads a filename from the command line, loads a Brainfuck program from that file,
+/// and then interprets it using a Brainfuck virtual machine.
+///
+/// # Errors
+///
+/// Returns an error if no filename is provided or if there are issues with reading or interpreting the program file.
+///
+/// # Examples
+///
+/// Run the program from the command line with:
+/// ```bash
+/// cargo run -- test_programs/example.bf
+/// ```
 fn main() {
     let cli = Cli::parse();
 

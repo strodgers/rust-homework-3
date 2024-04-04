@@ -1,7 +1,6 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::io::Cursor;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 
 use bft_interp::vm::BrainfuckVM;
 use bft_interp::vm_builder::VMBuilder;
@@ -17,9 +16,7 @@ fn interpreter_throughput(c: &mut Criterion) {
     c.bench_function("hello_world", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-                .set_program(
-                    Program::new(Cursor::new(program_string)).expect("Failed creating program"),
-                )
+                .set_program_reader(Cursor::new(program_string))
                 .set_cell_count(NonZeroUsize::new(30000))
                 .build()
                 .unwrap();
@@ -35,10 +32,7 @@ fn fixed_memory(c: &mut Criterion) {
     c.bench_function("fixed_memory", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-                .set_program(
-                    Program::new(Cursor::new(black_box(&program_string)))
-                        .expect("Failed creating program"),
-                )
+                .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
                 .build()
                 .unwrap();
@@ -54,10 +48,7 @@ fn memory_growth(c: &mut Criterion) {
     c.bench_function("memory_growth", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-                .set_program(
-                    Program::new(Cursor::new(black_box(&program_string)))
-                        .expect("Failed creating program"),
-                )
+                .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
                 .build()
                 .unwrap();
@@ -73,10 +64,7 @@ fn nested_loops(c: &mut Criterion) {
     c.bench_function("nested_loops", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-                .set_program(
-                    Program::new(Cursor::new(black_box(&program_string)))
-                        .expect("Failed creating program"),
-                )
+                .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
                 .build()
                 .unwrap();
@@ -91,9 +79,7 @@ fn long_program(c: &mut Criterion) {
     c.bench_function("long_program", |b| {
         b.iter(|| {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, NullWriter>::new()
-                .set_program_file(BufReader::new(
-                    File::open("benches/fib.bf").expect("Could not find file"),
-                ))
+                .set_program_file(PathBuf::from("benches/fib.bf"))
                 .set_allow_growth(true)
                 .set_output(NullWriter)
                 .build()

@@ -1,3 +1,4 @@
+/// Provides a builder for creating instances of the BrainfuckVM struct.
 use crate::{
     vm::BrainfuckVM,
     vm_error::{VMError, VMErrorSimple},
@@ -8,9 +9,41 @@ use std::{
     fs::File,
     io::{self, BufReader, Read, Write},
     num::NonZeroUsize,
+    path::PathBuf,
 };
 
-// Provides a fluent API to configure and build an instance of a Brainfuck VM. This includes setting up the cell kind, cell count, IO streams, and more
+/// Main builder object. Creates a BrainFuckVM according to various configs.
+///
+///
+/// # Example 1: Program from a string
+///
+/// ```rust
+/// use bft_interp::vm_builder::VMBuilder;
+/// use bft_interp::vm::BrainfuckVM;
+/// use std::io::Cursor;
+/// use bft_types::bf_program::Program;
+///
+/// let program_string = "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.";
+///
+/// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+///     .set_program_reader(Cursor::new(program_string))
+///     .build().expect("Failed!");
+/// ```
+///
+/// # Example 2: Program from a file
+///
+/// ```rust
+/// use bft_interp::vm_builder::VMBuilder;
+/// use bft_interp::vm::BrainfuckVM;
+/// use std::path::PathBuf;
+/// use bft_types::bf_program::Program;
+///
+/// let program_file = PathBuf::from("../benches/fib.bf");
+///
+/// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+///     .set_program_file(program_file)
+///     .build().expect("Failed!");
+
 #[derive(Default)]
 pub struct VMBuilder<'a, R, W>
 where
@@ -18,12 +51,13 @@ where
     W: Write,
 {
     cell_kind: Option<TypeId>,
+
     cell_count: Option<NonZeroUsize>,
     allow_growth: Option<bool>,
     input_reader: Option<Box<R>>,
     output_writer: Option<Box<W>>,
+    program_file: Option<PathBuf>,
     program_reader: Option<Box<dyn Read + 'a>>,
-    program: Option<Program>,
     report_state: Option<bool>,
 }
 
@@ -32,6 +66,7 @@ where
     R: Read + 'static,
     W: Write + 'static,
 {
+    /// Creates a new instance of `VMBuilder`.
     pub fn new() -> Self {
         VMBuilder {
             cell_kind: None,
@@ -39,44 +74,45 @@ where
             allow_growth: None,
             input_reader: None,
             output_writer: None,
+            program_file: None,
             program_reader: None,
-            program: None,
             report_state: None,
         }
     }
-
-    // Configures the VM to use a custom input stream
+    /// Configures the VM to use a custom input stream.
     pub fn set_input(mut self, input: R) -> Self {
         self.input_reader = Some(Box::new(input));
         self
     }
 
-    // Sets a custom output stream for the VM
+    /// Sets a custom output stream for the VM.
     pub fn set_output(mut self, output: W) -> Self {
         self.output_writer = Some(Box::new(output));
         self
     }
 
-    // TODO: make this more generic? Read + 'a
-    // Loads a Brainfuck program from a file
-    pub fn set_program_file(mut self, file: BufReader<File>) -> Self {
-        self.program_reader = Some(Box::new(BufReader::new(file)) as Box<dyn Read + 'a>);
+    /// Sets a file path to read the BrainFuck program from
+    pub fn set_program_file(mut self, filepath: PathBuf) -> Self {
+        self.program_file = Some(filepath);
         self
     }
 
-    // Directly sets the program to be executed by the VM
-    pub fn set_program(mut self, program: Program) -> Self {
-        self.program = Some(program);
+    /// Loads a Brainfuck program from a reader.
+    pub fn set_program_reader<T>(mut self, reader: T) -> Self
+    where
+        T: Read + 'a,
+    {
+        self.program_reader = Some(Box::new(reader));
         self
     }
 
-    // Specifies the type of cells used by the VM (e.g., u8, i32)
+    /// Specifies the type of cells used by the VM (e.g., u8, i32).
     pub fn set_cell_kind(mut self, cell_kind: TypeId) -> Self {
         self.cell_kind = Some(cell_kind);
         self
     }
 
-    // Determines the number of cells (memory size) the VM should initialize with
+    /// Determines the number of cells (memory size) the VM should initialize with.
     pub fn set_cell_count(mut self, cell_count: Option<NonZeroUsize>) -> Self {
         match cell_count {
             Some(count) => self.cell_count = Some(count),
@@ -88,18 +124,19 @@ where
         self
     }
 
-    // Allows or disallows the VM's tape (memory) to grow beyond the initial cell count
+    /// Allows or disallows the VM's tape (memory) to grow beyond the initial cell count.
     pub fn set_allow_growth(mut self, allow_growth: bool) -> Self {
         self.allow_growth = Some(allow_growth);
         self
     }
 
-    // Enables or disables detailed state reporting after each instruction is processed
+    /// Enables or disables detailed state reporting after each instruction is processed.
     pub fn set_report_state(mut self, report_state: bool) -> Self {
         self.report_state = Some(report_state);
         self
     }
 
+    /// Builds and returns a `BrainfuckVM` instance based on the configured options.
     pub fn build<N>(self) -> Result<BrainfuckVM<N>, VMError<N>>
     where
         N: CellKind,
@@ -107,32 +144,36 @@ where
         W: Write,
     {
         // Program must be set somehow
-        if self.program_reader.is_none() && self.program.is_none() {
+        if self.program_file.is_none() && self.program_reader.is_none() {
             return Err(VMError::Simple(VMErrorSimple::BuilderError {
                 reason: "Program must be set by using set_program or set_program_file".to_string(),
             }));
         }
 
-        let program = match self.program {
-            // If the program has been set, use that
-            Some(program) => program,
-            // If not, try and use the program_reader to create a program
-            None => {
-                let program_reader: Box<dyn Read> = match self.program_reader {
-                    Some(reader) => reader,
-                    None => {
-                        return Err(VMError::Simple(VMErrorSimple::BuilderError {
-                            reason: "Program reader must be set.".to_string(),
-                        }))
-                    }
-                };
-                Program::new(program_reader).map_err(|err| {
-                    VMError::Simple(VMErrorSimple::BuilderError {
-                        reason: format!("Failed to create program: {}", err),
-                    })
-                })?
-            }
+        // Try to use the program_reader first
+        let program_result = match self.program_reader {
+            Some(reader) => Program::new(reader),
+            None => match self.program_file {
+                Some(program_file) => {
+                    Program::new(BufReader::new(File::open(program_file).map_err(|err| {
+                        VMError::Simple(VMErrorSimple::BuilderError {
+                            reason: format!("Failed to create program from file: {}", err),
+                        })
+                    })?))
+                }
+                None => {
+                    return Err(VMError::Simple(VMErrorSimple::BuilderError {
+                        reason: "Program reader must be set.".to_string(),
+                    }))
+                }
+            },
         };
+
+        let program = program_result.map_err(|err| {
+            VMError::Simple(VMErrorSimple::BuilderError {
+                reason: format!("Failed to create program: {}", err),
+            })
+        })?;
 
         // Default IO to use stdin and stdout
         let input_reader: Box<dyn Read + 'static> = match self.input_reader {
@@ -225,7 +266,11 @@ mod builder_tests {
             "Expected default output_writer to be None"
         );
         assert!(
-            builder.program.is_none(),
+            builder.program_file.is_none(),
+            "Expected default program to be None"
+        );
+        assert!(
+            builder.program_reader.is_none(),
             "Expected default program to be None"
         );
         assert!(
