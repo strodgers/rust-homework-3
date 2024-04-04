@@ -1,6 +1,7 @@
-//! Provides a Brainfuck interpreter implemented in Rust.
-//!
-//!
+//! All the functionality to create a BrainFuck VM and run it, using a builder pattern.
+//! Comes with it's own error types for usual problems, and an iterator for going through
+//! instructions conveniently.
+//! 
 /// Core virtual machine logic, including execution and state management.
 pub mod vm;
 
