@@ -20,7 +20,14 @@ pub struct Cli {
     #[clap(short = 'e', long)]
     pub allow_growth: bool,
 
-    // Enable state reporting
+    /// Enable state reporting. THIS WILL MAKE IT SLOW! But you get to see the
+    /// interpreters state as it goes, as well as a final state
     #[clap(short = 's', long)]
     pub report_state: bool,
+
+    /// Sets the log level for the application.
+    ///
+    /// Available levels: error, warn, info, debug, trace
+    #[clap(short, long, default_value = "info")]
+    pub log_level: String,
 }

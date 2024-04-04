@@ -1,19 +1,15 @@
 use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
 use clap::Parser;
-use log::LevelFilter;
 use std::any::TypeId;
 use std::error::Error;
 mod cli;
 use cli::Cli;
-use std::process;
+use std::{env, process};
 
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    let test_log_level = LevelFilter::Warn;
-    let _ = env_logger::builder()
-        .is_test(true)
-        .filter(None, test_log_level)
-        .try_init();
+    env::set_var("RUST_LOG", &cli.log_level);
+    env_logger::init();
 
     let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
         .set_program_file(cli.program)
