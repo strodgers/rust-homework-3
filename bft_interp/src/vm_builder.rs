@@ -20,7 +20,7 @@ use std::{
 /// ```rust
 /// use bft_interp::vm_builder::VMBuilder;
 /// use bft_interp::vm::BrainfuckVM;
-/// use std::io::Cursor;
+/// # use std::io::Cursor;
 /// use bft_types::bf_program::Program;
 ///
 /// let program_string = "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.";
@@ -35,13 +35,33 @@ use std::{
 /// ```rust
 /// use bft_interp::vm_builder::VMBuilder;
 /// use bft_interp::vm::BrainfuckVM;
-/// use std::path::PathBuf;
+/// # use std::path::PathBuf;
 /// use bft_types::bf_program::Program;
 ///
 /// let program_file = PathBuf::from("../benches/fib.bf");
 ///
 /// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
 ///     .set_program_file(program_file)
+///     .build().expect("Failed!");
+///
+/// ```
+///
+/// # Example 3: Setting more interesting parameters
+///
+/// ```rust
+/// use bft_interp::vm_builder::VMBuilder;
+/// use bft_interp::vm::BrainfuckVM;
+/// # use std::path::PathBuf;
+/// use bft_types::bf_program::Program;
+/// # use core::num::NonZeroUsize;
+///
+/// let program_file = PathBuf::from("../benches/fib.bf");
+/// let cell_count = NonZeroUsize::new(1111);
+/// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+///     .set_program_file(program_file)
+///     .set_allow_growth(true)
+///     .set_cell_count(cell_count)
+///     .set_report_state(true)
 ///     .build().expect("Failed!");
 
 #[derive(Default)]
