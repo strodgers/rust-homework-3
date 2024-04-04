@@ -43,9 +43,9 @@ use std::{
 /// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
 ///     .set_program_file(program_file)
 ///     .build().expect("Failed!");
-/// 
+///
 /// ```
-/// 
+///
 /// # Example 3: Setting more interesting parameters
 ///
 /// ```rust

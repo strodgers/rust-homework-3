@@ -1,30 +1,29 @@
 //! A BrainFuck interpreter written in Rust.
-//! 
+//!
 //! Reads a BrainFuck program from a file and interprets it using a BrainFuckVM.
-//! 
+//!
 //! Optionally set --report-state to get state information output to stdout, along with the final state
 //! which includes the tape data (ALTHOUGH IT MAKES IT VERY SLOW)
-//! 
+//!
 //! There is also an API for setting different input/output streams during the programs execution,
 //! allowing the tape to grow, and some framework for using different cell types (other than u8). See
 //! bft_interp for the available options.
 
 use clap::Parser;
 use log::LevelFilter;
-use std::{any::TypeId, str::FromStr};
 use std::error::Error;
+use std::{any::TypeId, str::FromStr};
 mod cli;
+use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
 use cli::Cli;
 use std::{env, process};
-use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
 
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     let log_level = LevelFilter::from_str(&cli.log_level).unwrap_or(LevelFilter::Off);
     if cli.report_state && log_level < LevelFilter::Info {
         env::set_var("RUST_LOG", "info");
-    }
-    else {
+    } else {
         env::set_var("RUST_LOG", &cli.log_level);
     }
     env_logger::init();
