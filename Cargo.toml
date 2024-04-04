@@ -19,6 +19,7 @@ members = ["bft_interp", "bft_types", "bft_test_utils"]
 [dev-dependencies]
 criterion = "0.5.1"
 tempfile = "3.10.0"
+bft_test_utils = { path = "./bft_test_utils" }
 
 [[bench]]
 name = "benchmarks"

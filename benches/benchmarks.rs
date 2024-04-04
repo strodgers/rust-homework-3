@@ -1,29 +1,102 @@
-use std::any::TypeId;
 use std::fs::File;
 use std::io::BufReader;
+use std::io::Cursor;
+use std::num::NonZeroUsize;
 
 use bft_interp::vm::BrainfuckVM;
 use bft_interp::vm_builder::VMBuilder;
+use bft_types::bf_program::Program;
+use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
+use bft_test_utils::NullWriter;
 
-fn my_benchmark_function(c: &mut Criterion) {
-    c.bench_function("my_benchmark", |b| {
+fn interpreter_throughput(c: &mut Criterion) {
+    // Just do a hello world program
+    let program_string = "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.";
+
+    c.bench_function("hello_world", |b| {
         b.iter(|| {
-            let file =
-                File::open("/home/sam/git/rust-homework-3/bench.bf").expect("Failed to open file");
-            let program_file = BufReader::new(file);
-
             let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
-                .set_program_file(program_file)
-                .set_allow_growth(true)
-                .set_cell_kind(TypeId::of::<u8>())
+                .set_program(
+                    Program::new(Cursor::new(program_string)).expect("Failed creating program"),
+                )
+                .set_cell_count(NonZeroUsize::new(30000))
                 .build()
-                .expect("Failed to build VM"); // Here's the change
-
-            vm.interpret().expect("Interpretation failed"); // Assuming `interpret` might also return a Result
+                .unwrap();
+            vm.interpret().unwrap();
         });
     });
 }
 
-criterion_group!(benches, my_benchmark_function);
-criterion_main!(benches);
+fn fixed_memory(c: &mut Criterion) {
+    // Fixed tape size, move head right until the end of the tape (29,999)
+    // Do a + at the end just to actually using the final cell
+    let program_string = ">".repeat(30000 - 1) + "+";
+    c.bench_function("fixed_memory", |b| {
+        b.iter(|| {
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
+                .build()
+                .unwrap();
+            vm.interpret().unwrap();
+        });
+    });
+}
+
+fn memory_growth(c: &mut Criterion) {
+    // Allow growth, move head 3 times more than the fixed memory test
+    // Do a + at the end just to actually using the final cell
+    let program_string = ">".repeat(120000 - 3) + "+";
+    c.bench_function("memory_growth", |b| {
+        b.iter(|| {
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_allow_growth(true)
+                .build()
+                .unwrap();
+            vm.interpret().unwrap();
+        });
+    });
+}
+
+fn nested_loops(c: &mut Criterion)
+{
+    // Lots of nested loops
+    let program_string = "[[[[[[[[[[-]>]>>>>]<<<<<<]>>>>>>]<<<<<<<<<]>>>>>>>>>]<<<<<<<<<<]>>>>>>>>>>>]<<<<<<<<<<<]";
+    c.bench_function("nested_loops", |b| {
+        b.iter(|| {
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, std::io::Stdout>::new()
+                .set_program(Program::new(Cursor::new(black_box(&program_string))).expect("Failed creating program"))
+                .set_allow_growth(true)
+                .build()
+                .unwrap();
+            vm.interpret().unwrap();
+        });
+    });
+}
+
+fn long_program(c: &mut Criterion)
+{
+    // Fibonacci sequence
+    // Using NullWriter because this program spits loads of stuff out
+    c.bench_function("long_program", |b| {
+        b.iter(|| {
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<BufReader<File>, NullWriter>::new()
+                .set_program_file(BufReader::new(File::open("benches/fib.bf").expect("Could not find file")))
+                .set_allow_growth(true)
+                .set_output(NullWriter)
+                .build()
+                .unwrap();
+            vm.interpret().unwrap();
+        });
+    });
+}
+
+criterion_group!(memory_benchmarks, fixed_memory, memory_growth);
+criterion_group!(complexity_benchmarks, nested_loops, long_program);
+criterion_group!(throughput_benchmarks, interpreter_throughput);
+criterion_group!(all_benchmarks, fixed_memory, memory_growth, nested_loops, long_program, interpreter_throughput);
+
+criterion_main!(all_benchmarks);
+
