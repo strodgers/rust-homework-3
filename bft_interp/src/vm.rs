@@ -379,13 +379,9 @@ mod vm_tests {
         allow_growth: bool,
         cell_count: Option<NonZeroUsize>,
     ) -> Result<BrainfuckVM<u8>, VMError<u8>> {
-        let program =
-            Program::new(Cursor::new(program_string)).map_err(|_| VMError::ProgramError {
-                instruction: HumanReadableInstruction::undefined(),
-                reason: "Failed creating new test Program".to_string(),
-            })?;
+        let program_reader = Cursor::new(program_string);
         let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-            .set_program(program)
+            .set_program_reader(program_reader)
             .set_cell_count(cell_count)
             .set_allow_growth(allow_growth) // default or test-specific value
             .set_report_state(true) // Need this for tests
@@ -398,10 +394,8 @@ mod vm_tests {
         allow_growth: bool,
         cell_count: Option<NonZeroUsize>,
     ) -> Result<BrainfuckVM<u8>, Box<dyn std::error::Error>> {
-        let testfile = TestFile::new()?;
-        let program = Program::new(testfile)?;
         let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-            .set_program(program)
+            .set_program_reader(TestFile::new()?)
             .set_allow_growth(allow_growth)
             .set_cell_count(cell_count)
             .set_report_state(true) // Need this for tests
@@ -696,7 +690,6 @@ mod vm_tests {
         let mut program_string = String::with_capacity(number_of_instructions);
         program_string.extend(",".repeat(number_of_instructions).chars());
         let cell_count = NonZeroUsize::new(1);
-        let program = Program::new(Cursor::new(program_string))?;
 
         // Generate some random u8 values
         let mut rng = rand::thread_rng();
@@ -705,7 +698,7 @@ mod vm_tests {
 
         let reader = Cursor::new(buffer.clone());
         let mut vm: BrainfuckVM<u8> = VMBuilder::<Cursor<Vec<u8>>, std::io::Cursor<Vec<u8>>>::new()
-            .set_program(program)
+            .set_program_reader(Cursor::new(program_string))
             .set_cell_count(cell_count)
             .set_allow_growth(false)
             .set_input(reader)
@@ -766,7 +759,6 @@ mod vm_tests {
         program_string.extend(".>".repeat(number_of_reads).chars());
         // Remove the final > so we don't go over the cell count
         program_string.pop();
-        let program = Program::new(Cursor::new(program_string))?;
         let cell_count = NonZeroUsize::new(number_of_moves);
 
         // Generate some random u8 values
@@ -778,7 +770,7 @@ mod vm_tests {
         let output_buffer: Vec<u8> = Vec::new(); // Initialize an empty Vec<u8>
         let writer = Cursor::new(output_buffer);
         let mut vm: BrainfuckVM<u8> = VMBuilder::<Cursor<Vec<u8>>, std::io::Cursor<Vec<u8>>>::new()
-            .set_program(program)
+            .set_program_reader(Cursor::new(program_string))
             .set_cell_count(cell_count)
             .set_allow_growth(false)
             .set_output(writer)
