@@ -89,7 +89,7 @@ impl HumanReadableInstruction {
         self.index
     }
 
-    pub fn undefined() -> HumanReadableInstruction {
+    pub fn undefined() -> &'static HumanReadableInstruction {
         // Static so we can use it as a default value and when we need to error out
         static UNDEFINED: HumanReadableInstruction = HumanReadableInstruction {
             instruction: RawInstruction::Undefined,
@@ -97,7 +97,7 @@ impl HumanReadableInstruction {
             column: 0,
             index: 0,
         };
-        UNDEFINED
+        &UNDEFINED
     }
 }
 

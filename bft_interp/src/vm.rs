@@ -15,7 +15,7 @@ use std::{
 
 // Represents the VM capable of interpreting Brainfuck programs. It manages the execution environment
 // including the tape (memory), the instruction pointer, input/output streams, and execution state.
-pub struct BrainfuckVM<N>
+pub struct BrainfuckVM<'a, N>
 where
     N: CellKind,
 {
@@ -26,12 +26,12 @@ where
     program: Program,
     input_reader: Box<dyn Read>,
     output_writer: Box<dyn Write>,
-    current_instruction: HumanReadableInstruction,
+    current_instruction: &'a HumanReadableInstruction,
     instructions_processed: usize,
     report_state: bool,
 }
 
-impl<'a, N> BrainfuckVM<N>
+impl<'a, N> BrainfuckVM<'a, N>
 where
     N: CellKind,
 {
@@ -56,6 +56,9 @@ where
             instructions_processed: 0,
             report_state,
         }
+    }
+    pub fn program(&self) -> &Program {
+        &self.program
     }
     // Optionally retrieves the current state of the VM, including cell value and head position,
     // if state reporting is enabled
@@ -120,7 +123,7 @@ where
 
     fn process_instruction(
         &mut self,
-        hr_instruction: HumanReadableInstruction,
+        hr_instruction: &'a HumanReadableInstruction,
     ) -> Result<(), VMError<N>> {
         let mut next_index = self.instruction_index + 1;
         log::debug!("Processing instruction: {}", hr_instruction);
@@ -129,7 +132,7 @@ where
                 self.move_head_right()
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: *hr_instruction,
                         reason: "Failed to move head right".to_string(),
                     })?;
             }
@@ -137,7 +140,7 @@ where
                 self.move_head_left()
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: *hr_instruction,
                         reason: "Failed to move head left".to_owned(),
                     })?;
             }
@@ -145,7 +148,7 @@ where
                 self.increment_cell()
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: *hr_instruction,
                         reason: "Failed to increment cell".to_string(),
                     })?;
             }
@@ -153,19 +156,19 @@ where
                 self.decrement_cell()
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: *hr_instruction,
                         reason: "Failed to decrement cell".to_string(),
                     })?;
             }
             RawInstruction::OutputByte => {
                 self.write_value().map_err(|e| VMError::IOError {
-                    instruction: hr_instruction,
+                    instruction: *hr_instruction,
                     reason: e.to_string(),
                 })?;
             }
             RawInstruction::InputByte => {
                 self.read_value().map_err(|e| VMError::IOError {
-                    instruction: hr_instruction,
+                    instruction: *hr_instruction,
                     reason: e.to_string(),
                 })?;
             }
@@ -183,7 +186,7 @@ where
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
-                    instruction: hr_instruction,
+                    instruction: *hr_instruction,
                     reason: "Undefined instruction".to_string(),
                 });
             }
@@ -200,7 +203,7 @@ where
     }
 
     // Executes a single step (instruction) of the program
-    pub fn interpret_step(&mut self) -> Result<Option<VMState<N>>, VMError<N>> {
+    pub fn interpret_step(&'a mut self) -> Result<Option<VMState<N>>, VMError<N>> {
         let state = self.construct_state();
         // Check if the current instruction index is beyond the program's length.
         if self.instruction_index >= self.program.instructions().len() {
@@ -212,12 +215,12 @@ where
 
         // Get the instruction at the current index.
         let instruction = match self
-            .program
+            .program()
             .instructions()
             .get(self.instruction_index)
             {
                 // TODO: would very much like to get rid of this dereference
-                Some(instruction) => *instruction,
+                Some(instruction) => instruction,
                 None => {
                     return Err(VMError::Simple(VMErrorSimple::GeneralError {
                         reason: "Failed to get instruction".to_string(),
@@ -402,7 +405,7 @@ mod vm_tests {
     pub fn setup_vm_from_testfile(
         allow_growth: bool,
         cell_count: Option<NonZeroUsize>,
-    ) -> Result<BrainfuckVM<u8>, Box<dyn std::error::Error>> {
+    ) -> Result<BrainfuckVM<'static, u8>, Box<dyn std::error::Error>> {
         let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
             .set_program_reader(TestFile::new()?)
             .set_allow_growth(allow_growth)

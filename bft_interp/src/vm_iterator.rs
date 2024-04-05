@@ -10,14 +10,14 @@ pub struct VMIterator<'a, N>
 where
     N: CellKind,
 {
-    vm: &'a mut BrainfuckVM<N>,
+    vm: &'a mut BrainfuckVM<'a, N>,
     final_state: Option<VMState<N>>,
 }
 impl<'a, N> VMIterator<'a, N>
 where
     N: CellKind,
 {
-    pub fn new(vm: &'a mut BrainfuckVM<N>, final_state: Option<VMState<N>>) -> Self {
+    pub fn new(vm: &'a mut BrainfuckVM<'a, N>, final_state: Option<VMState<N>>) -> Self {
         VMIterator { vm, final_state }
     }
 

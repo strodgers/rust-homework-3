@@ -160,7 +160,7 @@ where
     }
 
     /// Builds and returns a `BrainfuckVM` instance based on the configured options.
-    pub fn build<N>(self) -> Result<BrainfuckVM<N>, VMError<N>>
+    pub fn build<N>(self) -> Result<BrainfuckVM<'a, N>, VMError<N>>
     where
         N: CellKind,
         R: Read,
