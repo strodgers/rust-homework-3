@@ -8,6 +8,19 @@
 //! There is also an API for setting different input/output streams during the programs execution,
 //! allowing the tape to grow, and some framework for using different cell types (other than u8). See
 //! bft_interp for the available options.
+//!
+//! # Examples
+//!
+//! Run a test program
+//! ```bash
+//! cargo run ../test_programs/example.bf
+//! ```
+//!
+//! Run a test program with dynamic tape memoery, initial cell count 10,000, report the final state
+//! ```bash
+//! cargo run test_programs/example.bf --allow-growth --cell-count 10000 --report-state
+//! ```
+//!
 
 use clap::Parser;
 use log::LevelFilter;
