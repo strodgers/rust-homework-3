@@ -95,12 +95,10 @@ where
             VMError::Simple(VMErrorSimple::BuilderError { reason }) => {
                 write!(f, "Builder error: {}", reason)
             }
-            VMError::Simple(VMErrorSimple::EndOfProgram { final_state }) => {
-                match final_state {
-                    Some(state) => write!(f, "End of program, final state: {}", state),
-                    None => write!(f, "End of program, no final state available"),
-                }
-            }
+            VMError::Simple(VMErrorSimple::EndOfProgram { final_state }) => match final_state {
+                Some(state) => write!(f, "End of program, final state: {}", state),
+                None => write!(f, "End of program, no final state available"),
+            },
         }
     }
 }

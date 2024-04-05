@@ -65,6 +65,7 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    println!("Finished {} steps", vm.instructions_processed());
     Ok(())
 }
 

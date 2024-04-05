@@ -77,6 +77,10 @@ where
         None
     }
 
+    pub fn instructions_processed(&self) -> usize {
+        self.instructions_processed
+    }
+
     fn get_bracket_position<'b>(
         &'a self,
         hr_instruction: &'b HumanReadableInstruction,
@@ -238,9 +242,8 @@ where
     pub fn interpret(&'a mut self) -> Result<Option<VMStateFinal<N>>, VMError<N>> {
         // Go through all instructions
         for state in self.iter() {
-            if let Err(e) = state {
-                return Err(e);
-            }
+            // Make sure no error
+            state?;
         }
         // Report final state if it's not None
         match self.current_state() {
@@ -451,11 +454,13 @@ mod vm_tests {
                     assert_eq!(state.raw_instruction(), RawInstruction::IncrementPointer);
                     // After each step, head should have gone up by one
                     assert_eq!(state.head(), instruction_index + 1);
-                },
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                }
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -472,11 +477,13 @@ mod vm_tests {
                     assert_eq!(state.raw_instruction(), RawInstruction::DecrementPointer);
                     // After each step, head should have gone down by one
                     assert_eq!(state.head(), (half_way - instruction_index - 1));
-                },
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                }
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -558,10 +565,12 @@ mod vm_tests {
                     // After each step, cell value should have gone up by one
                     assert_eq!(state.cell_value(), expected_cell_value as u8 + 1);
                 }
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -581,10 +590,12 @@ mod vm_tests {
                         (max_cell_value - expected_cell_value - 1) as u8
                     );
                 }
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -636,7 +647,11 @@ mod vm_tests {
         // Make sure that the cell value wraps around
         match vm.iter().skip(u8::MAX as usize).next() {
             Some(Ok(state)) => {
-                assert_eq!(state.unwrap().cell_value(), 0, "Cell value should have wrapped to 0");
+                assert_eq!(
+                    state.unwrap().cell_value(),
+                    0,
+                    "Cell value should have wrapped to 0"
+                );
             }
             Some(Err(e)) => {
                 return Err(Box::new(std::io::Error::new(
@@ -735,10 +750,12 @@ mod vm_tests {
                         "Cell value should match the read value"
                     );
                 }
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -816,11 +833,13 @@ mod vm_tests {
                         rng_value,
                         "Cell value should match the write value"
                     );
-                },
-                Ok(None) => return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Unexpected None value, report state must be on for tests!".to_string(),
-                )) as Box<dyn std::error::Error>),
+                }
+                Ok(None) => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Unexpected None value, report state must be on for tests!".to_string(),
+                    )) as Box<dyn std::error::Error>)
+                }
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
