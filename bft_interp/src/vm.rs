@@ -211,11 +211,20 @@ where
         }
 
         // Get the instruction at the current index.
-        let instruction = *self
+        let instruction = match self
             .program
             .instructions()
             .get(self.instruction_index)
-            .expect("Failed to get instruction; index out of bounds.");
+            {
+                // TODO: would very much like to get rid of this dereference
+                Some(instruction) => *instruction,
+                None => {
+                    return Err(VMError::Simple(VMErrorSimple::GeneralError {
+                        reason: "Failed to get instruction".to_string(),
+                    }))
+                }
+            };
+
         // Handle anything that might need mutation
         self.process_instruction(instruction)?;
 
