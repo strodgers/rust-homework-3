@@ -15,7 +15,9 @@ use std::{
 /// Main builder object. Creates a BrainFuckVM according to various configs.
 ///
 ///
-/// # Example 1: Program from a string
+/// # Examples
+///
+/// Program from a string
 ///
 /// ```rust
 /// use bft_interp::vm_builder::VMBuilder;
@@ -30,7 +32,8 @@ use std::{
 ///     .build().expect("Failed!");
 /// ```
 ///
-/// # Example 2: Program from a file
+///
+/// Program from a file
 ///
 /// ```rust
 /// use bft_interp::vm_builder::VMBuilder;
@@ -46,7 +49,7 @@ use std::{
 ///
 /// ```
 ///
-/// # Example 3: Setting more interesting parameters
+/// Setting more interesting parameters
 ///
 /// ```rust
 /// use bft_interp::vm_builder::VMBuilder;
