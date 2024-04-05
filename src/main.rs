@@ -50,18 +50,22 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
         .build()
         .map_err(|e| format!("Error: {}", e))?;
 
-    match vm.interpret() {
-        Ok(final_state) => {
-            if cli.report_state {
-                log::info!("Final state:\n{}", final_state);
+    // Run interpretation
+    let final_state_option = vm.interpret().map_err(|e| format!("{}", e))?;
+
+    // Report state if necessary
+    if cli.report_state {
+        match final_state_option {
+            Some(final_state) => log::info!("Final state:\n{}", final_state),
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed reporting final state",
+                )) as Box<dyn std::error::Error>)
             }
-            Ok(())
         }
-        Err(err) => Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Error: {}", err),
-        )) as Box<dyn std::error::Error>),
     }
+    Ok(())
 }
 
 /// Entry point for the interpreter program.

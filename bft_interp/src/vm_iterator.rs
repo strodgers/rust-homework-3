@@ -31,13 +31,13 @@ impl<'a, N> Iterator for VMIterator<'a, N>
 where
     N: CellKind,
 {
-    type Item = Result<VMState<N>, VMError<N>>;
+    type Item = Result<Option<VMState<N>>, VMError<N>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.vm.interpret_step() {
             Ok(result) => Some(Ok(result)),
             Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state })) => {
-                self.final_state = Some(final_state);
+                self.final_state = final_state;
                 None
             }
             Err(result) => Some(Err(result)),

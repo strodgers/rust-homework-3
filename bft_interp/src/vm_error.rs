@@ -17,7 +17,7 @@ where
     // Errors occurring during the construction of the VM, typically due to misconfiguration
     BuilderError { reason: String },
     // Signifies the normal completion of program execution, including a COPY of the final state of the VM for inspection
-    EndOfProgram { final_state: VMState<N> },
+    EndOfProgram { final_state: Option<VMState<N>> },
 }
 
 // Specific errors that provide context such as the problematic instruction and a detailed reason
@@ -96,7 +96,10 @@ where
                 write!(f, "Builder error: {}", reason)
             }
             VMError::Simple(VMErrorSimple::EndOfProgram { final_state }) => {
-                write!(f, "End of program, final state: {}", final_state)
+                match final_state {
+                    Some(state) => write!(f, "End of program, final state: {}", state),
+                    None => write!(f, "End of program, no final state available"),
+                }
             }
         }
     }

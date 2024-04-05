@@ -196,7 +196,7 @@ where
     }
 
     // Executes a single step (instruction) of the program
-    pub fn interpret_step(&mut self) -> Result<VMState<N>, VMError<N>> {
+    pub fn interpret_step(&mut self) -> Result<Option<VMState<N>>, VMError<N>> {
         let state = self.construct_state();
         // Check if the current instruction index is beyond the program's length.
         if self.instruction_index >= self.program.instructions().len() {
@@ -221,39 +221,38 @@ where
         Ok(current_state)
     }
 
-    fn construct_state(&self) -> VMState<N> {
+    fn construct_state(&self) -> Option<VMState<N>> {
         if self.report_state {
-            return VMState::new(
+            return Some(VMState::new(
                 self.tape[self.head],
                 self.head,
                 self.instruction_index,
                 self.current_instruction.raw_instruction().to_owned(),
                 self.instructions_processed,
-            );
+            ));
         }
-        VMState::<N>::default()
+        None
     }
 
     // Runs the entire Brainfuck program to completion or until an error occurs
-    pub fn interpret(&'a mut self) -> Result<VMStateFinal<N>, VMError<N>> {
+    pub fn interpret(&'a mut self) -> Result<Option<VMStateFinal<N>>, VMError<N>> {
+        // Go through all instructions
         for state in self.iter() {
-            match state {
-                Ok(_) => (),
-                Err(e) => return Err(e),
+            if let Err(e) = state {
+                return Err(e);
             }
         }
+        // Report final state if it's not None
         match self.current_state() {
-            Some(state) => Ok(VMStateFinal::new(state, self.tape.clone())),
+            Some(state) => Ok(Some(VMStateFinal::new(state, self.tape.clone()))),
             None => {
+                // This is only an error if we have report state set
                 if self.report_state {
                     return Err(VMError::Simple(VMErrorSimple::GeneralError {
                         reason: "Failed to get final state".to_string(),
                     }));
                 }
-                Ok(VMStateFinal::new(
-                    VMState::<N>::default(),
-                    self.tape.clone(),
-                ))
+                Ok(None)
             }
         }
     }
@@ -356,8 +355,6 @@ mod vm_tests {
     use super::*;
     use crate::vm_builder::VMBuilder;
     use bft_test_utils::TestFile;
-    use bft_types::bf_instructions::HumanReadableInstruction;
-    use bft_types::bf_program::Program;
     use env_logger;
     use log::LevelFilter;
     use rand::Rng;
@@ -411,7 +408,7 @@ mod vm_tests {
         // Move one more step, should reach end of program and final_state should equal expected_state
         match vm.interpret_step() {
             Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state })) => {
-                final_state == expected_state
+                final_state == Some(expected_state)
             }
             Ok(_) => false,
             Err(_) => false,
@@ -450,11 +447,15 @@ mod vm_tests {
         // Go forward half_way times
         for (instruction_index, iteration) in vm.iter().take(half_way).enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     assert_eq!(state.raw_instruction(), RawInstruction::IncrementPointer);
                     // After each step, head should have gone up by one
                     assert_eq!(state.head(), instruction_index + 1);
-                }
+                },
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -467,11 +468,15 @@ mod vm_tests {
         // Go back again half_way times
         for (instruction_index, iteration) in vm.iter().enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     assert_eq!(state.raw_instruction(), RawInstruction::DecrementPointer);
                     // After each step, head should have gone down by one
                     assert_eq!(state.head(), (half_way - instruction_index - 1));
-                }
+                },
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -548,11 +553,15 @@ mod vm_tests {
         // Increment cell value 255 times
         for (expected_cell_value, iteration) in vm.iter().take(max_cell_value).enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     assert_eq!(state.raw_instruction(), RawInstruction::IncrementByte);
                     // After each step, cell value should have gone up by one
                     assert_eq!(state.cell_value(), expected_cell_value as u8 + 1);
                 }
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -564,7 +573,7 @@ mod vm_tests {
         // Decrement cell value 255 times
         for (expected_cell_value, iteration) in vm.iter().enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     assert_eq!(state.raw_instruction(), RawInstruction::DecrementByte);
                     // After each step, cell value should have gone up by one
                     assert_eq!(
@@ -572,6 +581,10 @@ mod vm_tests {
                         (max_cell_value - expected_cell_value - 1) as u8
                     );
                 }
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -623,7 +636,7 @@ mod vm_tests {
         // Make sure that the cell value wraps around
         match vm.iter().skip(u8::MAX as usize).next() {
             Some(Ok(state)) => {
-                assert_eq!(state.cell_value(), 0, "Cell value should have wrapped to 0");
+                assert_eq!(state.unwrap().cell_value(), 0, "Cell value should have wrapped to 0");
             }
             Some(Err(e)) => {
                 return Err(Box::new(std::io::Error::new(
@@ -708,7 +721,7 @@ mod vm_tests {
 
         for (input_index, iteration) in vm.iter().enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     let rng_value = buffer[input_index];
                     // Print these out just to be sure
                     log::debug!(
@@ -722,6 +735,10 @@ mod vm_tests {
                         "Cell value should match the read value"
                     );
                 }
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -785,7 +802,7 @@ mod vm_tests {
         // since the instructions repeat READ => MOVE RIGHT
         for (output_index, iteration) in vm.iter().step_by(2).enumerate() {
             match iteration {
-                Ok(state) => {
+                Ok(Some(state)) => {
                     assert_eq!(state.raw_instruction(), RawInstruction::OutputByte);
                     let rng_value = buffer[output_index];
                     // Print these out just to be sure
@@ -799,7 +816,11 @@ mod vm_tests {
                         rng_value,
                         "Cell value should match the write value"
                     );
-                }
+                },
+                Ok(None) => return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>),
                 Err(e) => {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -833,54 +854,54 @@ mod vm_tests {
         let mut vm = setup_vm_from_string(&program_string, true, None)?;
 
         // First two iterations should increment the first cell, instruction_index goes up normally
-        let mut state = vm.interpret_step()?;
+        let mut state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::IncrementByte);
         assert!(state.cell_value() == 1);
         assert!(state.instruction_index() == 1);
 
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::IncrementByte);
         assert!(state.cell_value() == 2);
         assert!(state.instruction_index() == 2);
 
         // The loop should be entered, instruction_index goes up normally
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::ConditionalForward);
         assert!(state.cell_value() == 2);
         assert!(state.instruction_index() == 3);
 
         // Next instruction should decrement the cell, instruction_index goes up normally
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::DecrementByte);
         assert!(state.cell_value() == 1);
         assert!(state.instruction_index() == 4);
 
         // Jump back to the beginning of the loop
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::ConditionalBackward);
         assert!(state.cell_value() == 1);
         assert!(state.instruction_index() == 2);
 
         // Cell value is still non-zero, so enter the loop again
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::ConditionalForward);
         assert!(state.cell_value() == 1);
         assert!(state.instruction_index() == 3);
 
         // Decrement the cell again
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::DecrementByte);
         assert!(state.cell_value() == 0);
         assert!(state.instruction_index() == 4);
 
         // Jump back to the beginning of the loop
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::ConditionalBackward);
         assert!(state.cell_value() == 0);
         assert!(state.instruction_index() == 2);
 
         // Now the cell value is 0, so the loop should be exited
-        state = vm.interpret_step()?;
+        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::ConditionalForward);
         assert!(state.cell_value() == 0);
         assert!(state.instruction_index() == 5);

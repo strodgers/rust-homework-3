@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use bft_interp::vm::BrainfuckVM;
 use bft_interp::vm_builder::VMBuilder;
 use bft_test_utils::NullWriter;
-use bft_types::bf_program::Program;
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
@@ -15,9 +14,10 @@ fn interpreter_throughput(c: &mut Criterion) {
 
     c.bench_function("hello_world", |b| {
         b.iter(|| {
-            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+            let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, NullWriter>::new()
                 .set_program_reader(Cursor::new(program_string))
                 .set_cell_count(NonZeroUsize::new(30000))
+                .set_output(NullWriter)
                 .build()
                 .unwrap();
             vm.interpret().unwrap();
