@@ -2,7 +2,7 @@ use core::fmt;
 
 use bft_types::bf_cellkind::CellKind;
 use bft_types::bf_instructions::HumanReadableInstruction;
-use bft_types::vm_state::VMState;
+use bft_types::vm_state::VMStateFinal;
 
 // Simple error types with static strings
 #[derive(Debug)]
@@ -11,13 +11,21 @@ where
     N: CellKind,
 {
     // Represents a generic error with a static reason
-    GeneralError { reason: String },
+    GeneralError {
+        reason: String,
+    },
     // Indicates an error related to type mismatches or issues
-    TypeError { reason: String },
+    TypeError {
+        reason: String,
+    },
     // Errors occurring during the construction of the VM, typically due to misconfiguration
-    BuilderError { reason: String },
+    BuilderError {
+        reason: String,
+    },
     // Signifies the normal completion of program execution, including a COPY of the final state of the VM for inspection
-    EndOfProgram { final_state: Option<VMState<N>> },
+    EndOfProgram {
+        final_state: Option<VMStateFinal<N>>,
+    },
 }
 
 // Specific errors that provide context such as the problematic instruction and a detailed reason

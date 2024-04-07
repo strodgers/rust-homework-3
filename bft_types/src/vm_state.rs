@@ -4,12 +4,12 @@ use core::fmt;
 
 // Extends VMState with a snapshot of the VM's tape at the end of program execution,
 // providing a complete picture of the final program state
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct VMStateFinal<N>
 where
     N: CellKind,
 {
-    state: VMState<N>,
+    state: Option<VMState<N>>,
     tape: Vec<N>,
 }
 
@@ -17,8 +17,12 @@ impl<N> VMStateFinal<N>
 where
     N: CellKind,
 {
-    pub fn new(state: VMState<N>, tape: Vec<N>) -> Self {
+    pub fn new(state: Option<VMState<N>>, tape: Vec<N>) -> Self {
         VMStateFinal { state, tape }
+    }
+
+    pub fn state(&self) -> Option<VMState<N>> {
+        self.state.clone()
     }
 }
 impl<N> fmt::Display for VMStateFinal<N>
@@ -39,13 +43,21 @@ where
             .map(|&(index, value)| format!("[{}, {}]", index, value))
             .collect::<Vec<String>>()
             .join(",");
-
-        write!(f, "{}\nTape:\n{}", self.state, non_zero_cells_str)
+        if self.state.is_some() {
+            write!(
+                f,
+                "{}\nTape:\n{}\n",
+                self.state.as_ref().unwrap(),
+                non_zero_cells_str
+            )
+        } else {
+            write!(f, "No state available\nTape:\n{}", non_zero_cells_str)
+        }
     }
 }
 
 // Represents the state of the VM at a specific point in execution, useful for debugging or state inspection
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct VMState<N>
 where
     N: CellKind,
@@ -53,7 +65,7 @@ where
     cell_value: N,
     head: usize,
     instruction_index: usize,
-    raw_instruction: RawInstruction,
+    current_instruction: RawInstruction,
     instructions_processed: usize,
 }
 
@@ -65,14 +77,14 @@ where
         cell_value: N,
         head: usize,
         instruction_index: usize,
-        raw_instruction: RawInstruction,
+        last_instruction: RawInstruction,
         instructions_processed: usize,
     ) -> Self {
         VMState {
             cell_value,
             head,
             instruction_index,
-            raw_instruction,
+            current_instruction: last_instruction,
             instructions_processed,
         }
     }
@@ -89,7 +101,7 @@ where
     }
 
     pub fn raw_instruction(&self) -> RawInstruction {
-        self.raw_instruction
+        self.current_instruction
     }
 
     pub fn instructions_processed(&self) -> usize {
@@ -108,7 +120,7 @@ where
             self.cell_value,
             self.head,
             self.instruction_index,
-            self.raw_instruction,
+            self.current_instruction,
             self.instructions_processed
         )
     }
