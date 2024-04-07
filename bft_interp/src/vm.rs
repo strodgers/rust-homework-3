@@ -156,15 +156,14 @@ where
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell_value()?.is_zero() {
-                    let bracket_position = self.get_bracket_position(&hr_instruction)?;
+                    let bracket_position = self.get_bracket_position(&hr_instruction)? + 1;
                     log::debug!("Jumping to {}", bracket_position);
                     next_index = bracket_position;
                 };
             }
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
-                // Subtract 1, since it is only in ConditionalForward that we make an assesment
-                next_index = self.get_bracket_position(&hr_instruction)? - 1;
+                next_index = self.get_bracket_position(&hr_instruction)?;
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
@@ -184,17 +183,30 @@ where
 
     // Executes a single step (instruction) of the program
     pub fn interpret_step(&mut self) -> Result<Option<VMState<N>>, VMError<N>> {
+        let init_instruction_index = self.instruction_index;
         if self.instruction_index < self.program.instructions().len() {
-            let latest_instruction = self.current_instruction().raw_instruction();
             match self.process_instruction() {
-                Ok(_) => Ok(self.construct_state(latest_instruction)),
+                Ok(_) => {
+                    if self.report_state {
+                        Ok(Some(VMState::new(
+                            self.tape[self.head],
+                            self.head,
+                            self.instruction_index,
+                            self.program.instructions()[init_instruction_index].raw_instruction(),
+                            self.instructions_processed,
+                        )))
+                    } else {
+                        Ok(None)
+                    }
+                }
                 Err(e) => Err(e),
             }
         } else {
             // Handle the end of the program
-            let tape = self.tape.clone();
             let mut final_state: Option<VMStateFinal<N>> = None;
+            // Only do this if reporting state, since tape clone is expensive
             if self.report_state {
+                let tape = self.tape.clone();
                 final_state = Some(VMStateFinal::new(
                     Some(VMState::new(
                         self.tape[self.head],
@@ -208,19 +220,6 @@ where
             }
             Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state }))
         }
-    }
-
-    fn construct_state(&self, latest_instruction: RawInstruction) -> Option<VMState<N>> {
-        if self.report_state {
-            return Some(VMState::new(
-                self.tape[self.head],
-                self.head,
-                self.instruction_index,
-                latest_instruction,
-                self.instructions_processed,
-            ));
-        }
-        None
     }
 
     // Runs the entire Brainfuck program to completion or until an error occurs
@@ -253,7 +252,8 @@ where
         if self.head == self.tape.len() - 1 {
             // Extend the tape if allowed
             if self.allow_growth {
-                self.tape.push(N::default());
+                // Allocate 100 to reduce the number of allocations
+                self.tape.resize(self.tape.len() + 100, N::default());
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(());

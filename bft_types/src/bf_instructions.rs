@@ -110,54 +110,61 @@ impl fmt::Display for HumanReadableInstruction {
 
 #[derive(Debug)]
 pub(crate) struct InstructionPreprocessor {
-    open_brackets: Vec<usize>,
-    matched_brackets: Vec<(usize, usize)>,
+    matching_brackets: Vec<Option<usize>>,
 }
 
 impl InstructionPreprocessor {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(program_length: usize) -> Self {
+        // Preallocate the space, since we know it can't be more than the program length
         InstructionPreprocessor {
-            open_brackets: Vec::new(),
-            matched_brackets: Vec::new(),
+            matching_brackets: vec![None; program_length],
         }
     }
 
     pub(crate) fn process(
         &mut self,
-        hr_instruction: HumanReadableInstruction,
+        instructions: &[HumanReadableInstruction],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let index = hr_instruction.index;
-        match hr_instruction.raw_instruction() {
-            RawInstruction::ConditionalForward => {
-                self.open_brackets.push(index);
-            }
-            RawInstruction::ConditionalBackward => {
-                if let Some(open_bracket) = self.open_brackets.pop() {
-                    self.matched_brackets.push((open_bracket, index));
-                } else {
-                    let err_msg = format!(
-                        "Unmatched closing bracket at line {}, column {}",
-                        hr_instruction.line, hr_instruction.column
-                    );
-                    log::error!("{}", err_msg); // Log the error
-                    return Err(err_msg.into()); // Also return the error for handling
+        // Track the open brackets with a stack
+        let mut open_brackets = Vec::new();
+
+        for (index, hr_instruction) in instructions.iter().enumerate() {
+            match hr_instruction.raw_instruction() {
+                RawInstruction::ConditionalForward => {
+                    open_brackets.push(index);
                 }
+                RawInstruction::ConditionalBackward => {
+                    // The closing bracket should match the last open bracket. If we can't pop then it
+                    // is unmatched
+                    if let Some(open_bracket) = open_brackets.pop() {
+                        // Set both the open bracket and closing bracket to point to each other
+                        self.matching_brackets[open_bracket] = Some(index);
+                        self.matching_brackets[index] = Some(open_bracket);
+                    } else {
+                        let err_msg = format!(
+                            "Unmatched closing bracket at line {}, column {}",
+                            hr_instruction.line, hr_instruction.column
+                        );
+                        log::error!("{}", err_msg);
+                        return Err(err_msg.into());
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
+
+        if !open_brackets.is_empty() {
+            let err_msg = format!("Unmatched opening bracket",);
+            log::error!("{}", err_msg);
+            return Err(err_msg.into());
+        }
+
         Ok(())
     }
 
-    // Retrieve the matching bracket's position
     pub(crate) fn get_bracket_position(&self, index: usize) -> Option<usize> {
-        self.matched_brackets
-            .iter()
-            .find(|(open, close)| *open == index || *close == index)
-            .map(|(open, close)| if *open == index { *close } else { *open })
-    }
-
-    pub(crate) fn balanced(&self) -> bool {
-        self.open_brackets.is_empty()
+        // Try and find the matching position, which will be None if unmatched
+        self.matching_brackets.get(index).and_then(|&pos| pos)
     }
 }
 

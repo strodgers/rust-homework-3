@@ -17,9 +17,10 @@ pub struct Program {
 
 impl Program {
     pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
-        let mut preprocessor = InstructionPreprocessor::new();
-        let instructions = Self::read_data(reader, &mut preprocessor)?;
+        let instructions = Self::read_data(reader)?;
+        let mut preprocessor = InstructionPreprocessor::new(instructions.len());
 
+        preprocessor.process(&instructions)?;
         Ok(Program {
             instructions,
             preprocessor,
@@ -28,14 +29,13 @@ impl Program {
 
     fn read_data<R: Read>(
         reader: R,
-        preprocessor: &mut InstructionPreprocessor,
     ) -> Result<Vec<HumanReadableInstruction>, Box<dyn std::error::Error>> {
         // Read the data and parse into a vector of HumanReadableInstruction
         let buffread = BufReader::new(reader);
         let mut vec: Vec<HumanReadableInstruction> = Vec::new();
 
         // Go through each line
-        let mut index = usize::default();
+        let mut index = 0;
         for (line_idx, line_result) in buffread.lines().enumerate() {
             let line = line_result?;
 
@@ -43,18 +43,13 @@ impl Program {
             for (col_idx, c) in line.chars().enumerate() {
                 if let Ok(instruction) = RawInstruction::from_char(&c).ok_or("Invalid character") {
                     {
-                        index += 1;
                         let hr_instruction: HumanReadableInstruction =
                             HumanReadableInstruction::new(instruction, line_idx, col_idx, index);
-                        preprocessor.process(hr_instruction)?;
                         vec.push(hr_instruction);
+                        index += 1;
                     }
                 }
             }
-        }
-
-        if !preprocessor.balanced() {
-            return Err("Unbalanced brackets".into());
         }
 
         Ok(vec)
@@ -77,8 +72,11 @@ mod tests {
 
     #[test]
     fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
-        let mut preprocessor: &mut InstructionPreprocessor = &mut InstructionPreprocessor::new();
-        let instructions = Program::read_data(TestFile::new()?, &mut preprocessor)?;
+        let instructions = Program::read_data(TestFile::new()?)?;
+        let preprocessor: &mut InstructionPreprocessor =
+            &mut InstructionPreprocessor::new(instructions.len());
+        preprocessor.process(&instructions)?;
+
         assert_eq!(instructions.len(), TEST_FILE_NUM_INSTRUCTIONS);
 
         // "+[-[<<[+[--->]-[<<<]]]>>>-]"
