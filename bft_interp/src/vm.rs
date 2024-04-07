@@ -59,10 +59,6 @@ where
         &self.program
     }
 
-    fn current_instruction(&self) -> &HumanReadableInstruction {
-        &self.program.instructions()[self.instruction_index]
-    }
-
     pub fn instructions_processed(&self) -> usize {
         self.instructions_processed
     }

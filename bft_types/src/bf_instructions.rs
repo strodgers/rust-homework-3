@@ -89,16 +89,6 @@ impl HumanReadableInstruction {
         self.index
     }
 
-    pub fn undefined() -> &'static HumanReadableInstruction {
-        // Static so we can use it as a default value and when we need to error out
-        static UNDEFINED: HumanReadableInstruction = HumanReadableInstruction {
-            instruction: RawInstruction::Undefined,
-            line: 0,
-            column: 0,
-            index: 0,
-        };
-        &UNDEFINED
-    }
 }
 
 // Nice display string
@@ -154,7 +144,7 @@ impl InstructionPreprocessor {
         }
 
         if !open_brackets.is_empty() {
-            let err_msg = format!("Unmatched opening bracket",);
+            let err_msg = "Unmatched opening bracket".to_string();
             log::error!("{}", err_msg);
             return Err(err_msg.into());
         }
