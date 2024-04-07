@@ -184,31 +184,6 @@ where
 
     // Executes a single step (instruction) of the program
     pub fn interpret_step(&mut self) -> Result<Option<VMState<N>>, VMError<N>> {
-        // Construct the current state before processing the instruction in case we need to return
-        // let state = self.construct_state();
-        // Check if the current instruction index is beyond the program's length.
-        // if self.instruction_index >= self.program.instructions().len() {
-        //     // Handle the end of the program
-        //     let tape = self.tape.clone();
-        //     let mut final_state: Option<VMStateFinal<N>> = None;
-        //     if self.report_state
-        //     {
-        //         final_state = Some(VMStateFinal::new(
-        //             Some(VMState::new(
-        //                 self.tape[self.head],
-        //                 self.head,
-        //                 self.instruction_index,
-        //                 self.current_instruction().raw_instruction().to_owned(),
-        //                 self.instructions_processed,
-        //             )),
-        //             tape));
-        //     }
-        //     return Err(VMError::Simple(VMErrorSimple::EndOfProgram {
-        //         final_state,
-        //     }));
-        // }
-
-        // Handle anything that might need mutation
         if self.instruction_index < self.program.instructions().len() {
             let latest_instruction = self.current_instruction().raw_instruction();
             match self.process_instruction() {
@@ -249,15 +224,20 @@ where
     }
 
     // Runs the entire Brainfuck program to completion or until an error occurs
-    pub fn interpret(&mut self) -> Result<Option<VMState<N>>, VMError<N>> {
+    pub fn interpret(&mut self) -> Result<Option<VMStateFinal<N>>, VMError<N>> {
         // Go through all instructions, get final_state at the end
 
-        let mut state: Option<VMState<N>> = None;
-        for _ in 0..self.program.instructions().len() {
-            state = self.interpret_step()?;
+        let mut state = self.interpret_step();
+        while state.is_ok() {
+            state = self.interpret_step();
         }
 
-        Ok(state)
+        match state {
+            Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state })) => Ok(final_state),
+            _ => Err(VMError::Simple(VMErrorSimple::GeneralError {
+                reason: "Should have reached end of program!".to_string(),
+            })),
+        }
     }
 
     fn move_head_left(&mut self) -> Result<(), ()> {
@@ -653,7 +633,7 @@ mod vm_tests {
         let program_string = "++-->+<--";
         let number_of_instructions = program_string.len();
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(2))?;
-        vm.interpret()?;
+        let _ = vm.interpret();
 
         let expected_final_state = VMState::<u8>::new(
             254,
@@ -777,7 +757,7 @@ mod vm_tests {
         // since the instructions repeat READ => MOVE RIGHT
         for output_index in 0..number_of_instructions {
             if output_index % 2 != 0 {
-                vm.interpret_step();
+                vm.interpret_step()?;
                 continue;
             }
             match vm.interpret_step() {
