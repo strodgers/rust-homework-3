@@ -248,8 +248,8 @@ where
         if self.head == self.tape.len() - 1 {
             // Extend the tape if allowed
             if self.allow_growth {
-                // Allocate 100 to reduce the number of allocations
-                self.tape.resize(self.tape.len() + 100, N::default());
+                // Allocate 1024 to reduce the number of allocations
+                self.tape.resize(self.tape.len() + 1024, N::default());
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(());
