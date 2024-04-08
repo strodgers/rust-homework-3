@@ -102,64 +102,82 @@ where
 
     fn process_instruction(&mut self) -> Result<(), VMError<N>> {
         // Most of the time, we just move forward by one. Only when there is a conditional jump will it be different.
-        let mut next_index = self.instruction_index + 1;
+        let mut next_index = self.instruction_index;
         let hr_instruction = self.program.instructions()[self.instruction_index];
+        let mut collapsed_count = self
+            .program
+            .collapsed_count(self.instruction_index)
+            .unwrap_or_else(|| 1);
         log::debug!("Processing instruction: {}", hr_instruction);
         match hr_instruction.raw_instruction() {
             RawInstruction::IncrementPointer => {
-                self.move_head_right()
-                    .map_err(|_| VMError::InvalidHeadPosition {
+                self.move_head_right(collapsed_count).map_err(|_| {
+                    VMError::InvalidHeadPosition {
                         position: self.head,
                         instruction: hr_instruction,
                         reason: "Failed to move head right".to_string(),
-                    })?;
+                    }
+                })?;
+                next_index += collapsed_count;
             }
             RawInstruction::DecrementPointer => {
-                self.move_head_left()
+                self.move_head_left(collapsed_count)
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
                         instruction: hr_instruction,
                         reason: "Failed to move head left".to_owned(),
                     })?;
+                next_index += collapsed_count;
             }
             RawInstruction::IncrementByte => {
-                self.increment_cell()
+                self.increment_cell(collapsed_count)
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
                         instruction: hr_instruction,
                         reason: "Failed to increment cell".to_string(),
                     })?;
+                next_index += collapsed_count;
             }
             RawInstruction::DecrementByte => {
-                self.decrement_cell()
+                self.decrement_cell(collapsed_count)
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
                         instruction: hr_instruction,
                         reason: "Failed to decrement cell".to_string(),
                     })?;
+                next_index += collapsed_count;
             }
             RawInstruction::OutputByte => {
                 self.write_value().map_err(|e| VMError::IOError {
                     instruction: hr_instruction,
                     reason: e.to_string(),
                 })?;
+                next_index += 1;
+                collapsed_count = 1;
             }
             RawInstruction::InputByte => {
                 self.read_value().map_err(|e| VMError::IOError {
                     instruction: hr_instruction,
                     reason: e.to_string(),
                 })?;
+                next_index += 1;
+                collapsed_count = 1;
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell_value()?.is_zero() {
                     let bracket_position = self.get_bracket_position(&hr_instruction)? + 1;
                     log::debug!("Jumping to {}", bracket_position);
                     next_index = bracket_position;
-                };
+                }
+                else {
+                    next_index += 1;
+                }
+                collapsed_count = 1;
             }
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
                 next_index = self.get_bracket_position(&hr_instruction)?;
+                collapsed_count = 1;
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
@@ -169,7 +187,7 @@ where
             }
         }
         // Track number of instructions processed
-        self.instructions_processed += 1;
+        self.instructions_processed += collapsed_count;
 
         // Move to the next instruction
         self.instruction_index = next_index;
@@ -235,36 +253,40 @@ where
         }
     }
 
-    fn move_head_left(&mut self) -> Result<(), ()> {
-        if self.head == 0 {
+    fn move_head_left(&mut self, collapsed_count: usize) -> Result<(), ()> {
+        if self.head < collapsed_count {
             Err(())
         } else {
-            self.head -= 1;
+            self.head -= collapsed_count;
             Ok(())
         }
     }
 
-    fn move_head_right(&mut self) -> Result<(), ()> {
-        if self.head == self.tape.len() - 1 {
+    fn move_head_right(&mut self, collapsed_count: usize) -> Result<(), ()> {
+        if self.head >= self.tape.len() - collapsed_count {
             // Extend the tape if allowed
             if self.allow_growth {
                 // Allocate 1024 to reduce the number of allocations
-                self.tape.resize(self.tape.len() + 1024, N::default());
+                self.tape
+                    .resize(self.tape.len() + 1024 - collapsed_count, N::default());
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(());
             }
         }
-        self.head += 1;
+        self.head += collapsed_count;
 
         Ok(())
     }
 
     /// Increments the value of the cell pointed to by the head.
-    fn increment_cell(&mut self) -> Result<(), ()> {
+    fn increment_cell(&mut self, collapsed_count: usize) -> Result<(), ()> {
         match self.current_cell() {
             Ok(cell) => {
-                cell.increment();
+                for _ in 0..collapsed_count {
+                    // TODO
+                    cell.increment();
+                }
                 Ok(())
             }
             Err(_) => Err(()),
@@ -272,10 +294,13 @@ where
     }
 
     /// Decrements the value of the cell pointed to by the head.
-    fn decrement_cell(&mut self) -> Result<(), ()> {
+    fn decrement_cell(&mut self, collapsed_count: usize) -> Result<(), ()> {
         match self.current_cell() {
             Ok(cell) => {
-                cell.decrement();
+                for _ in 0..collapsed_count {
+                    // TODO
+                    cell.decrement();
+                }
                 Ok(())
             }
             Err(_) => Err(()),
@@ -426,39 +451,35 @@ mod vm_tests {
         program_string.extend("<".repeat(half_way).chars());
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(half_way * 2))?;
 
-        // Go forward half_way times
-        for instruction_index in 0..half_way {
-            let state = vm.interpret_step()?;
-            match state {
-                Some(state) => {
-                    // assert_eq!(state.raw_instruction(), RawInstruction::IncrementPointer, "Failed at iteration {}: Expected instruction to be {}, but got {}", instruction_index, RawInstruction::IncrementPointer, state.raw_instruction());
-                    // After each step, head should have gone up by one
-                    assert_eq!(state.head(), instruction_index + 1);
-                }
-                None => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Unexpected None value, report state must be on for tests!".to_string(),
-                    )) as Box<dyn std::error::Error>)
-                }
+        // Go forward. With collapsed instructions, this should be a single step
+        let state = vm.interpret_step()?;
+        match state {
+            Some(state) => {
+                // assert_eq!(state.raw_instruction(), RawInstruction::IncrementPointer, "Failed at iteration {}: Expected instruction to be {}, but got {}", instruction_index, RawInstruction::IncrementPointer, state.raw_instruction());
+                // After each step, head should have gone up by one
+                assert_eq!(state.head(), 5);
+            }
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>)
             }
         }
 
-        // Go back again half_way times
-        for instruction_index in (0..half_way).rev() {
-            let state = vm.interpret_step()?;
-            match state {
-                Some(state) => {
-                    // assert_eq!(state.raw_instruction(), RawInstruction::DecrementPointer);
-                    // After each step, head should have gone down by one
-                    assert_eq!(state.head(), instruction_index);
-                }
-                None => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Unexpected None value, report state must be on for tests!".to_string(),
-                    )) as Box<dyn std::error::Error>)
-                }
+        // Go back
+        let state = vm.interpret_step()?;
+        match state {
+            Some(state) => {
+                // assert_eq!(state.raw_instruction(), RawInstruction::DecrementPointer);
+                // After each step, head should have gone down by one
+                assert_eq!(state.head(), 0);
+            }
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>)
             }
         }
         // let finalstate = vm.interpret();
@@ -523,37 +544,33 @@ mod vm_tests {
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
         // Increment cell value 255 times
-        for expeted_cell_value in 0..max_cell_value {
-            let state = vm.interpret_step()?;
-            match state {
-                Some(state) => {
-                    assert_eq!(state.raw_instruction(), RawInstruction::IncrementByte);
-                    // After each step, cell value should have gone up by one
-                    assert_eq!(state.cell_value(), expeted_cell_value as u8 + 1);
-                }
-                None => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Unexpected None value, report state must be on for tests!".to_string(),
-                    )) as Box<dyn std::error::Error>)
-                }
+        let state = vm.interpret_step()?;
+        match state {
+            Some(state) => {
+                assert_eq!(state.raw_instruction(), RawInstruction::IncrementByte);
+                // After each step, cell value should have gone up by one
+                assert_eq!(state.cell_value(), max_cell_value as u8);
+            }
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>)
             }
         }
         // Decrement cell value 255 times
-        for expected_cell_value in (0..max_cell_value).rev() {
-            let state = vm.interpret_step()?;
-            match state {
-                Some(state) => {
-                    assert_eq!(state.raw_instruction(), RawInstruction::DecrementByte);
-                    // After each step, cell value should have gone up by one
-                    assert_eq!(state.cell_value(), expected_cell_value as u8);
-                }
-                None => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Unexpected None value, report state must be on for tests!".to_string(),
-                    )) as Box<dyn std::error::Error>)
-                }
+        let state = vm.interpret_step()?;
+        match state {
+            Some(state) => {
+                assert_eq!(state.raw_instruction(), RawInstruction::DecrementByte);
+                // After each step, cell value should have gone up by one
+                assert_eq!(state.cell_value(), 0);
+            }
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Unexpected None value, report state must be on for tests!".to_string(),
+                )) as Box<dyn std::error::Error>)
             }
         }
 
@@ -595,23 +612,7 @@ mod vm_tests {
         let number_of_instructions = u8::MAX as usize + 1;
         let program_string = "+".repeat(number_of_instructions);
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
-
-        // Make sure that the cell value wraps around
-        for cell_value in 0..number_of_instructions {
-            match vm.interpret_step() {
-                Ok(_) => assert_eq!(
-                    vm.tape.get(vm.head).unwrap().to_owned(),
-                    (cell_value + 1) as u8
-                ),
-                Err(e) => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Error: {}", e),
-                    )) as Box<dyn std::error::Error>)
-                }
-            }
-        }
-
+        vm.interpret()?;
         let expected_final_state = VMState::<u8>::new(
             0,
             0,
@@ -632,7 +633,7 @@ mod vm_tests {
         let _ = vm.interpret();
 
         let expected_final_state = VMState::<u8>::new(
-            254,
+            255,
             0,
             number_of_instructions,
             RawInstruction::Undefined,
@@ -813,11 +814,6 @@ mod vm_tests {
 
         // First two iterations should increment the first cell, instruction_index goes up normally
         let mut state = vm.interpret_step()?.unwrap();
-        assert!(state.raw_instruction() == RawInstruction::IncrementByte);
-        assert!(state.cell_value() == 1);
-        assert!(state.instruction_index() == 1);
-
-        state = vm.interpret_step()?.unwrap();
         assert!(state.raw_instruction() == RawInstruction::IncrementByte);
         assert!(state.cell_value() == 2);
         assert!(state.instruction_index() == 2);

@@ -24,6 +24,10 @@ where
     pub fn state(&self) -> Option<VMState<N>> {
         self.state.clone()
     }
+
+    pub fn tape(&self) -> Vec<N> {
+        self.tape.clone()
+    }
 }
 impl<N> fmt::Display for VMStateFinal<N>
 where

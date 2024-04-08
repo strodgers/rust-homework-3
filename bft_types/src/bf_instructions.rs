@@ -88,7 +88,6 @@ impl HumanReadableInstruction {
     pub fn index(&self) -> usize {
         self.index
     }
-
 }
 
 // Nice display string
@@ -98,9 +97,15 @@ impl fmt::Display for HumanReadableInstruction {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CollapsedInstruction {
+    instruction: RawInstruction,
+    count: usize,
+}
 #[derive(Debug)]
 pub(crate) struct InstructionPreprocessor {
     matching_brackets: Vec<Option<usize>>,
+    collapsed_instructions: Vec<Option<CollapsedInstruction>>,
 }
 
 impl InstructionPreprocessor {
@@ -108,6 +113,7 @@ impl InstructionPreprocessor {
         // Preallocate the space, since we know it can't be more than the program length
         InstructionPreprocessor {
             matching_brackets: vec![None; program_length],
+            collapsed_instructions: vec![None; program_length],
         }
     }
 
@@ -117,9 +123,13 @@ impl InstructionPreprocessor {
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Track the open brackets with a stack
         let mut open_brackets = Vec::new();
+        let mut current_instruction: Option<RawInstruction> = None;
+        let mut count = 0;
+        let mut original_index = 0;
 
         for (index, hr_instruction) in instructions.iter().enumerate() {
-            match hr_instruction.raw_instruction() {
+            let raw_instruction = hr_instruction.raw_instruction();
+            match raw_instruction {
                 RawInstruction::ConditionalForward => {
                     open_brackets.push(index);
                 }
@@ -140,7 +150,32 @@ impl InstructionPreprocessor {
                     }
                 }
                 _ => {}
+            };
+
+            if Some(raw_instruction) == current_instruction {
+                count += 1; // Repeated instruction
+            } else {
+                if let Some(curr_inst) = current_instruction {
+                    // Save the previous instruction
+                    self.collapsed_instructions[original_index - count] =
+                        Some(CollapsedInstruction {
+                            instruction: curr_inst,
+                            count,
+                        });
+                }
+                // Reset for the new instruction
+                current_instruction = Some(raw_instruction);
+                count = 1;
             }
+            original_index += 1;
+        }
+
+        // Save the last instruction
+        if let Some(curr_inst) = current_instruction {
+            self.collapsed_instructions[original_index - count] = Some(CollapsedInstruction {
+                instruction: curr_inst,
+                count,
+            });
         }
 
         if !open_brackets.is_empty() {
@@ -150,6 +185,14 @@ impl InstructionPreprocessor {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn collapsed_count(&self, original_index: usize) -> Option<usize> {
+        if let Some(collapsed) = self.collapsed_instructions[original_index] {
+            Some(collapsed.count)
+        } else {
+            None
+        }
     }
 
     pub(crate) fn get_bracket_position(&self, index: usize) -> Option<usize> {

@@ -62,6 +62,14 @@ impl Program {
     pub fn get_bracket_position(&self, index: usize) -> Option<usize> {
         self.preprocessor.get_bracket_position(index)
     }
+
+    pub fn collapsed_count(&self, original_index: usize) -> Option<usize> {
+        if let Some(count) = self.preprocessor.collapsed_count(original_index) {
+            Some(count)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
