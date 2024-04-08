@@ -330,13 +330,22 @@ where
 
     pub fn write_value(&mut self) -> Result<(), VMError<N>> {
         match N::from(self.current_cell()?.get()) {
-            Some(value) => self
+            Some(value) => 
+            {
+                // Write the output
+                self
                 .output_writer
                 .write_all(&value.to_bytes())
                 .map_err(|e| VMError::IOError {
                     instruction: self.program.instructions()[self.instruction_index],
                     reason: e.to_string(),
-                })?,
+                })?;
+                // Flush the output
+                self.output_writer.flush().map_err(|e| VMError::IOError {
+                    instruction: self.program.instructions()[self.instruction_index],
+                    reason: e.to_string(),
+                })?;
+            }
             None => {
                 return Err(VMError::IOError {
                     instruction: self.program.instructions()[self.instruction_index],
@@ -594,9 +603,10 @@ mod vm_tests {
         Ok(())
     }
 
+
     #[test]
-    fn test_decrement_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
-        let program_string = "-";
+    fn test_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
+        let program_string = "-+";
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
         let expected_cell_value: u8 = 255;
@@ -613,25 +623,23 @@ mod vm_tests {
             }
         }
 
+        let expected_cell_value: u8 = 0;
+        match vm.interpret_step() {
+            Ok(_) => assert_eq!(
+                vm.tape.get(vm.head).unwrap().to_owned(),
+                expected_cell_value
+            ),
+            Err(e) => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Error: {}", e),
+                )) as Box<dyn std::error::Error>)
+            }
+        }
+
         Ok(())
     }
 
-    #[test]
-    fn test_increment_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
-        let number_of_instructions = u8::MAX as usize + 1;
-        let program_string = "+".repeat(number_of_instructions);
-        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
-        vm.interpret()?;
-        let expected_final_state = VMState::<u8>::new(
-            0,
-            0,
-            number_of_instructions,
-            RawInstruction::Undefined,
-            number_of_instructions,
-        );
-        assert!(ensure_vm_final_state(vm, expected_final_state));
-        Ok(())
-    }
 
     #[test]
     fn test_end_of_program() -> Result<(), Box<dyn std::error::Error>> {
