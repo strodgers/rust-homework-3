@@ -99,7 +99,6 @@ impl fmt::Display for HumanReadableInstruction {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CollapsedInstruction {
-    instruction: RawInstruction,
     count: usize,
 }
 #[derive(Debug)]
@@ -155,14 +154,9 @@ impl InstructionPreprocessor {
             if Some(raw_instruction) == current_instruction {
                 count += 1; // Repeated instruction
             } else {
-                if let Some(curr_inst) = current_instruction {
-                    // Save the previous instruction
-                    self.collapsed_instructions[original_index - count] =
-                        Some(CollapsedInstruction {
-                            instruction: curr_inst,
-                            count,
-                        });
-                }
+                // Save the previous instruction
+                self.collapsed_instructions[original_index - count] =
+                    Some(CollapsedInstruction { count });
                 // Reset for the new instruction
                 current_instruction = Some(raw_instruction);
                 count = 1;
@@ -171,11 +165,9 @@ impl InstructionPreprocessor {
         }
 
         // Save the last instruction
-        if let Some(curr_inst) = current_instruction {
-            self.collapsed_instructions[original_index - count] = Some(CollapsedInstruction {
-                instruction: curr_inst,
-                count,
-            });
+        if current_instruction.is_some() {
+            self.collapsed_instructions[original_index - count] =
+                Some(CollapsedInstruction { count });
         }
 
         if !open_brackets.is_empty() {
@@ -188,11 +180,7 @@ impl InstructionPreprocessor {
     }
 
     pub(crate) fn collapsed_count(&self, original_index: usize) -> Option<usize> {
-        if let Some(collapsed) = self.collapsed_instructions[original_index] {
-            Some(collapsed.count)
-        } else {
-            None
-        }
+        self.collapsed_instructions[original_index].map(|collapsed| collapsed.count)
     }
 
     pub(crate) fn get_bracket_position(&self, index: usize) -> Option<usize> {

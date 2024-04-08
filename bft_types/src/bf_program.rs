@@ -64,11 +64,7 @@ impl Program {
     }
 
     pub fn collapsed_count(&self, original_index: usize) -> Option<usize> {
-        if let Some(count) = self.preprocessor.collapsed_count(original_index) {
-            Some(count)
-        } else {
-            None
-        }
+        self.preprocessor.collapsed_count(original_index)
     }
 }
 

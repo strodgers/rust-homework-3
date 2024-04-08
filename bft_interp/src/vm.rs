@@ -98,7 +98,7 @@ where
     }
 
     fn get_collapsed_count(&self, index: usize) -> usize {
-        self.program.collapsed_count(index).unwrap_or_else(|| 1)
+        self.program.collapsed_count(index).unwrap_or(1)
     }
 
     fn process_instruction(&mut self) -> Result<(), VMError<N>> {
@@ -245,7 +245,7 @@ where
         match state {
             Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state })) => Ok(final_state),
             Err(e) => Err(VMError::Simple(VMErrorSimple::GeneralError {
-                reason: format!("Error: {}", e.to_string()),
+                reason: format!("Error: {}", e),
             })),
             Ok(_) => Err(VMError::Simple(VMErrorSimple::GeneralError {
                 reason: "Should have reached end of program!".to_string(),

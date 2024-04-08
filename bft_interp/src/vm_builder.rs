@@ -5,7 +5,6 @@ use crate::{
 };
 use bft_types::{bf_cellkind::CellKind, bf_program::Program};
 use std::{
-    any::TypeId,
     fs::File,
     io::{self, BufReader, Read, Write},
     num::NonZeroUsize,
