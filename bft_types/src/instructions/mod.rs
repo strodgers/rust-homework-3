@@ -105,14 +105,22 @@ pub struct CollapsedInstruction {
 pub(crate) struct InstructionPreprocessor {
     matching_brackets: Vec<Option<usize>>,
     collapsed_instructions: Vec<Option<CollapsedInstruction>>,
+    optimize: bool,
 }
 
 impl InstructionPreprocessor {
-    pub(crate) fn new(program_length: usize) -> Self {
+    pub(crate) fn new(program_length: usize, optimize: bool) -> Self {
         // Preallocate the space, since we know it can't be more than the program length
+        // Don't preallocate the collapsed instructions if we're not optimizing
+        let collapsed_instructions = if optimize {
+            vec![None; program_length]
+        } else {
+            vec![None; 0]
+        };
         InstructionPreprocessor {
             matching_brackets: vec![None; program_length],
-            collapsed_instructions: vec![None; program_length],
+            collapsed_instructions: collapsed_instructions,
+            optimize,
         }
     }
 
@@ -151,35 +159,42 @@ impl InstructionPreprocessor {
                 _ => {}
             };
 
-            if Some(raw_instruction) == current_instruction {
-                count += 1; // Repeated instruction
-            } else {
-                // Save the previous instruction
+            if self.optimize {
+                if Some(raw_instruction) == current_instruction {
+                    count += 1; // Repeated instruction
+                } else {
+                    // Save the previous instruction
+                    self.collapsed_instructions[original_index - count] =
+                        Some(CollapsedInstruction { count });
+                    // Reset for the new instruction
+                    current_instruction = Some(raw_instruction);
+                    count = 1;
+                }
+                original_index += 1;
+            }
+        }
+
+        if self.optimize {
+            // Save the last instruction
+            if current_instruction.is_some() {
                 self.collapsed_instructions[original_index - count] =
                     Some(CollapsedInstruction { count });
-                // Reset for the new instruction
-                current_instruction = Some(raw_instruction);
-                count = 1;
             }
-            original_index += 1;
-        }
 
-        // Save the last instruction
-        if current_instruction.is_some() {
-            self.collapsed_instructions[original_index - count] =
-                Some(CollapsedInstruction { count });
-        }
-
-        if !open_brackets.is_empty() {
-            let err_msg = "Unmatched opening bracket".to_string();
-            log::error!("{}", err_msg);
-            return Err(err_msg.into());
+            if !open_brackets.is_empty() {
+                let err_msg = "Unmatched opening bracket".to_string();
+                log::error!("{}", err_msg);
+                return Err(err_msg.into());
+            }
         }
 
         Ok(())
     }
 
     pub(crate) fn collapsed_count(&self, original_index: usize) -> Option<usize> {
+        if !self.optimize {
+            return None;
+        }
         self.collapsed_instructions[original_index].map(|collapsed| collapsed.count)
     }
 

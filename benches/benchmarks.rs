@@ -30,6 +30,7 @@ fn interpreter_throughput(c: &mut Criterion) {
                 .set_program_reader(Cursor::new(program_string))
                 .set_cell_count(NonZeroUsize::new(30000))
                 .set_output(NullWriter)
+                .set_optimization(false) // Small program
                 .build()
                 .unwrap();
             vm.interpret().unwrap();
@@ -46,6 +47,7 @@ fn fixed_memory(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
+                .set_optimization(false) // Fixed memory, no point
                 .build()
                 .expect("Failed to build VM");
             vm.interpret().unwrap();
@@ -62,6 +64,7 @@ fn memory_growth(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
+                .set_optimization(true)
                 .build()
                 .expect("Failed to build VM");
             vm.interpret().unwrap();
@@ -78,6 +81,7 @@ fn nested_loops(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
+                .set_optimization(true)
                 .build()
                 .expect("Failed to build VM");
             vm.interpret().unwrap();
@@ -94,6 +98,7 @@ fn long_program(c: &mut Criterion) {
                 .set_program_file(PathBuf::from("benches/fib.bf"))
                 .set_allow_growth(true)
                 .set_output(NullWriter)
+                .set_optimization(true)
                 .build()
                 .expect("Failed to build VM");
             vm.interpret().unwrap();

@@ -33,8 +33,7 @@ use std::process;
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     // Get the log level from the environment variable, or use the cli arg
-    let log_level = env::var("BFT_LOG")
-        .unwrap_or_else(|_| cli.log_level.to_string());
+    let log_level = env::var("BFT_LOG").unwrap_or_else(|_| cli.log_level.to_string());
 
     // Set up the logger
     let env = Env::new().filter(log_level.clone());
@@ -46,6 +45,8 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
         .set_program_file(cli.program)
         .set_allow_growth(cli.allow_growth)
+        .set_buffer_output(cli.buffer_output)
+        .set_optimization(!cli.no_optimize)
         .set_cell_count(cli.cell_count)
         .set_report_state(cli.report_state)
         .build()

@@ -16,9 +16,9 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
+    pub fn new<R: Read>(reader: R, optimize: bool) -> Result<Self, Box<dyn Error>> {
         let instructions = Self::read_data(reader)?;
-        let mut preprocessor = InstructionPreprocessor::new(instructions.len());
+        let mut preprocessor = InstructionPreprocessor::new(instructions.len(), optimize);
 
         preprocessor.process(&instructions)?;
         Ok(Program {
@@ -85,7 +85,7 @@ mod tests {
 
         let instructions = Program::read_data(file)?;
         let preprocessor: &mut InstructionPreprocessor =
-            &mut InstructionPreprocessor::new(instructions.len());
+            &mut InstructionPreprocessor::new(instructions.len(), true);
         preprocessor.process(&instructions)?;
 
         assert_eq!(instructions.len(), program_string.len());

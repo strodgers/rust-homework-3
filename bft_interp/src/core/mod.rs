@@ -19,6 +19,7 @@ where
     tape: Vec<N>,
     head: usize,
     allow_growth: bool,
+    buffer_output: bool,
     instruction_index: usize,
     program: Program,
     input_reader: Box<dyn Read>,
@@ -36,6 +37,7 @@ where
         program: Program,
         cell_count: NonZeroUsize,
         allow_growth: bool,
+        buffer_output: bool,
         input_reader: Box<dyn Read>,
         output_writer: Box<dyn Write>,
         report_state: bool,
@@ -44,6 +46,7 @@ where
             tape: vec![N::default(); cell_count.get()],
             head: 0,
             allow_growth,
+            buffer_output,
             instruction_index: 0,
             program,
             input_reader,
@@ -330,21 +333,21 @@ where
 
     pub fn write_value(&mut self) -> Result<(), VMError<N>> {
         match N::from(self.current_cell()?.get()) {
-            Some(value) => 
-            {
+            Some(value) => {
                 // Write the output
-                self
-                .output_writer
-                .write_all(&value.to_bytes())
-                .map_err(|e| VMError::IOError {
-                    instruction: self.program.instructions()[self.instruction_index],
-                    reason: e.to_string(),
-                })?;
-                // Flush the output
-                self.output_writer.flush().map_err(|e| VMError::IOError {
-                    instruction: self.program.instructions()[self.instruction_index],
-                    reason: e.to_string(),
-                })?;
+                self.output_writer
+                    .write_all(&value.to_bytes())
+                    .map_err(|e| VMError::IOError {
+                        instruction: self.program.instructions()[self.instruction_index],
+                        reason: e.to_string(),
+                    })?;
+                // Flush the output if buffer_output is false
+                if !self.buffer_output {
+                    self.output_writer.flush().map_err(|e| VMError::IOError {
+                        instruction: self.program.instructions()[self.instruction_index],
+                        reason: e.to_string(),
+                    })?;
+                }
             }
             None => {
                 return Err(VMError::IOError {
@@ -603,7 +606,6 @@ mod vm_tests {
         Ok(())
     }
 
-
     #[test]
     fn test_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = "-+";
@@ -639,7 +641,6 @@ mod vm_tests {
 
         Ok(())
     }
-
 
     #[test]
     fn test_end_of_program() -> Result<(), Box<dyn std::error::Error>> {

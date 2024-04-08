@@ -74,6 +74,8 @@ where
 {
     cell_count: Option<NonZeroUsize>,
     allow_growth: Option<bool>,
+    optimization: Option<bool>,
+    buffer_output: Option<bool>,
     input_reader: Option<Box<R>>,
     output_writer: Option<Box<W>>,
     program_file: Option<PathBuf>,
@@ -91,6 +93,8 @@ where
         VMBuilder {
             cell_count: None,
             allow_growth: None,
+            optimization: None,
+            buffer_output: None,
             input_reader: None,
             output_writer: None,
             program_file: None,
@@ -137,9 +141,22 @@ where
         self
     }
 
-    /// Allows or disallows the VM's tape (memory) to grow beyond the initial cell count.
+    /// Set the VM's tape (memory) to be allowed to grow beyond the initial cell count.
     pub fn set_allow_growth(mut self, allow_growth: bool) -> Self {
         self.allow_growth = Some(allow_growth);
+        self
+    }
+
+    /// Turn on optimizations, which might speed up large/complex programs, while potentially
+    /// slowing down smaller ones.
+    pub fn set_optimization(mut self, optimization: bool) -> Self {
+        self.optimization = Some(optimization);
+        self
+    }
+
+    /// Enables or disables output buffering. If disabled, output will be written immediately.
+    pub fn set_buffer_output(mut self, buffer_output: bool) -> Self {
+        self.buffer_output = Some(buffer_output);
         self
     }
 
@@ -163,17 +180,25 @@ where
             }));
         }
 
+        // If no optimization provided, default to false.
+        // Need this to init Program
+        let optimization = self.optimization.unwrap_or_else(|| {
+            log::info!("Using default optimization false");
+            false
+        });
+
         // Try to use the program_reader first
         let program_result = match self.program_reader {
-            Some(reader) => Program::new(reader),
+            Some(reader) => Program::new(reader, optimization),
             None => match self.program_file {
-                Some(program_file) => {
-                    Program::new(BufReader::new(File::open(program_file).map_err(|err| {
+                Some(program_file) => Program::new(
+                    BufReader::new(File::open(program_file).map_err(|err| {
                         VMError::Simple(VMErrorSimple::BuilderError {
                             reason: format!("Failed to create program from file: {}", err),
                         })
-                    })?))
-                }
+                    })?),
+                    optimization,
+                ),
                 None => {
                     return Err(VMError::Simple(VMErrorSimple::BuilderError {
                         reason: "Program reader must be set.".to_string(),
@@ -211,9 +236,15 @@ where
             NonZeroUsize::new(30000).unwrap()
         });
 
-        // If no allow growth provided, default to false
+        // If allow growth not provided, default to false
         let allow_growth = self.allow_growth.unwrap_or_else(|| {
             log::info!("Using default allow growth false");
+            false
+        });
+
+        // If buffer output not provided, default to false
+        let buffer_output = self.buffer_output.unwrap_or_else(|| {
+            log::info!("Using default buffer output false");
             false
         });
 
@@ -228,6 +259,7 @@ where
             program,
             cell_count,
             allow_growth,
+            buffer_output,
             input_reader,
             output_writer,
             report_state,
