@@ -24,7 +24,7 @@
 
 use clap::Parser;
 use env_logger::Env;
-use std::error::Error;
+use std::{env, error::Error};
 mod cli;
 use bft_interp::{builder::VMBuilder, core::BrainfuckVM};
 use cli::Cli;
@@ -32,12 +32,17 @@ use std::process;
 
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    // TODO
-    let env = Env::new()
-        .filter("BFT_LOG")
-        .default_filter_or(cli.log_level);
-    env_logger::init_from_env(env);
+    // Get the log level from the environment variable, or use the cli arg
+    let log_level = env::var("BFT_LOG")
+        .unwrap_or_else(|_| cli.log_level.to_string());
 
+    // Set up the logger
+    let env = Env::new().filter(log_level.clone());
+    env_logger::Builder::from_env(env)
+        .parse_filters(&log_level)
+        .init();
+
+    // Use builder to make a VM instance
     let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
         .set_program_file(cli.program)
         .set_allow_growth(cli.allow_growth)
