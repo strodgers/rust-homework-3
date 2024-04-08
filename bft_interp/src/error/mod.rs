@@ -1,7 +1,7 @@
 use core::fmt;
 
-use bft_types::bf_cellkind::CellKind;
-use bft_types::bf_instructions::HumanReadableInstruction;
+use bft_types::cellkind::CellKind;
+use bft_types::instructions::HumanReadableInstruction;
 use bft_types::vm_state::VMStateFinal;
 
 // Simple error types with static strings

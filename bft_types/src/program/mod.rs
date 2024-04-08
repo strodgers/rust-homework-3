@@ -1,4 +1,4 @@
-use crate::bf_instructions::{HumanReadableInstruction, InstructionPreprocessor, RawInstruction};
+use crate::instructions::{HumanReadableInstruction, InstructionPreprocessor, RawInstruction};
 use std::{
     error::Error,
     io::{BufRead, BufReader, Read},
@@ -71,7 +71,7 @@ impl Program {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bf_instructions::{InstructionPreprocessor, RawInstruction};
+    use crate::instructions::{InstructionPreprocessor, RawInstruction};
     use bft_test_utils::{TestFile, TEST_FILE_NUM_INSTRUCTIONS};
 
     #[test]

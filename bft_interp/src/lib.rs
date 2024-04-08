@@ -3,10 +3,10 @@
 //! instructions conveniently.
 //!
 /// Core virtual machine logic, including execution and state management.
-pub mod vm;
+pub mod core;
 
 /// Builder pattern for constructing VM instances with custom configurations.
-pub mod vm_builder;
+pub mod builder;
 
 /// Error handling types and logic specific to VM operation.
-pub mod vm_error;
+pub mod error;

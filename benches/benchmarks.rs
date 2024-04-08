@@ -2,8 +2,8 @@ use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use bft_interp::vm::BrainfuckVM;
-use bft_interp::vm_builder::VMBuilder;
+use bft_interp::core::BrainfuckVM;
+use bft_interp::builder::VMBuilder;
 use bft_test_utils::NullWriter;
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};

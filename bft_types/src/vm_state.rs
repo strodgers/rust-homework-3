@@ -1,5 +1,5 @@
-use crate::bf_cellkind::CellKind;
-use crate::bf_instructions::RawInstruction;
+use crate::cellkind::CellKind;
+use crate::instructions::RawInstruction;
 use core::fmt;
 
 // Extends VMState with a snapshot of the VM's tape at the end of program execution,

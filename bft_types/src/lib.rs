@@ -8,13 +8,13 @@
 //! of each module.
 
 // Defines the types of cells used in a Brainfuck program's execution tape.
-pub mod bf_cellkind;
+pub mod cellkind;
 
 // Handles the parsing and representation of Brainfuck instructions.
-pub mod bf_instructions;
+pub mod instructions;
 
 // Facilitates reading and parsing Brainfuck programs from files or strings.
-pub mod bf_program;
+pub mod program;
 
 // Manages the state of the Brainfuck virtual machine during execution.
 pub mod vm_state;

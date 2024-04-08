@@ -1,8 +1,9 @@
-use crate::vm_error::{VMError, VMErrorSimple};
+
+use crate::error::{VMError, VMErrorSimple};
 use bft_types::{
-    bf_cellkind::CellKind,
-    bf_instructions::{HumanReadableInstruction, RawInstruction},
-    bf_program::Program,
+    cellkind::CellKind,
+    instructions::{HumanReadableInstruction, RawInstruction},
+    program::Program,
     vm_state::{VMState, VMStateFinal},
 };
 use std::{
@@ -357,7 +358,7 @@ where
 #[cfg(test)]
 mod vm_tests {
     use super::*;
-    use crate::vm_builder::VMBuilder;
+    use crate::builder::VMBuilder;
     use bft_test_utils::TestFile;
     use env_logger;
     use log::LevelFilter;

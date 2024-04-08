@@ -1,9 +1,9 @@
 /// Provides a builder for creating instances of the BrainfuckVM struct.
 use crate::{
-    vm::BrainfuckVM,
-    vm_error::{VMError, VMErrorSimple},
+    core::BrainfuckVM,
+    error::{VMError, VMErrorSimple},
 };
-use bft_types::{bf_cellkind::CellKind, bf_program::Program};
+use bft_types::{cellkind::CellKind, program::Program};
 use std::{
     fs::File,
     io::{self, BufReader, Read, Write},
