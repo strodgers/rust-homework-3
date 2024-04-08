@@ -52,8 +52,8 @@ where
 {
     cell_value: N,
     head: usize,
-    instruction_index: usize,
-    raw_instruction: RawInstruction,
+    next_index: usize,
+    next_instruction: RawInstruction,
     instructions_processed: usize,
 }
 
@@ -64,15 +64,15 @@ where
     pub fn new(
         cell_value: N,
         head: usize,
-        instruction_index: usize,
-        raw_instruction: RawInstruction,
+        next_index: usize,
+        next_instruction: RawInstruction,
         instructions_processed: usize,
     ) -> Self {
         VMState {
             cell_value,
             head,
-            instruction_index,
-            raw_instruction,
+            next_index,
+            next_instruction,
             instructions_processed,
         }
     }
@@ -84,12 +84,12 @@ where
         self.head
     }
 
-    pub fn instruction_index(&self) -> usize {
-        self.instruction_index
+    pub fn next_index(&self) -> usize {
+        self.next_index
     }
 
-    pub fn raw_instruction(&self) -> RawInstruction {
-        self.raw_instruction
+    pub fn next_instruction(&self) -> RawInstruction {
+        self.next_instruction
     }
 
     pub fn instructions_processed(&self) -> usize {
@@ -107,8 +107,8 @@ where
             "Cell value: {}\nHead: {}\nNext instructionindex: {}\nLast instruction: {}\nInstructions processed: {}",
             self.cell_value,
             self.head,
-            self.instruction_index,
-            self.raw_instruction,
+            self.next_index,
+            self.next_instruction,
             self.instructions_processed
         )
     }

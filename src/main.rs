@@ -25,7 +25,7 @@
 use clap::Parser;
 use log::LevelFilter;
 use std::error::Error;
-use std::{any::TypeId, str::FromStr};
+use std::str::FromStr;
 mod cli;
 use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
 use cli::Cli;
@@ -33,11 +33,13 @@ use std::{env, process};
 
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
+    // just change the log level, dont need to change env stuff
+
     let log_level = LevelFilter::from_str(&cli.log_level).unwrap_or(LevelFilter::Off);
     if cli.report_state && log_level < LevelFilter::Info {
-        env::set_var("RUST_LOG", "info");
+        env::set_var("BFT_LOG", "info");
     } else {
-        env::set_var("RUST_LOG", &cli.log_level);
+        env::set_var("BFT_LOG", &cli.log_level);
     }
     env_logger::init();
 
@@ -45,7 +47,6 @@ fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
         .set_program_file(cli.program)
         .set_allow_growth(cli.allow_growth)
         .set_cell_count(cli.cell_count)
-        .set_cell_kind(TypeId::of::<u8>())
         .set_report_state(cli.report_state)
         .build()
         .map_err(|e| format!("Error: {}", e))?;

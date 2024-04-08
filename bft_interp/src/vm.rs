@@ -1,3 +1,5 @@
+mod badger;
+
 use crate::{
     vm_error::{VMError, VMErrorSimple},
     vm_iterator::VMIterator,
@@ -82,17 +84,13 @@ where
     }
 
     fn get_bracket_position<'b>(
-        &'a self,
-        hr_instruction: &'b HumanReadableInstruction,
-    ) -> Result<usize, VMError<N>> {
-        match self.program.get_bracket_position(hr_instruction.index()) {
-            Some(position) => Ok(position),
-            None => Err(VMError::ProgramError {
-                instruction: *hr_instruction,
-                reason: "Could not find matching bracket".to_string(),
-            }),
+        &'a self
+        ) -> Result<usize, ()> {
+            match self.program.get_bracket_position(self.instruction_index) {
+                Some(position) => Ok(position),
+                None => Err(())
+            }
         }
-    }
 
     pub fn current_cell(&mut self) -> Result<&mut N, VMError<N>> {
         if let Some(cell) = self.tape.get_mut(self.head) {
@@ -118,18 +116,31 @@ where
         }
     }
 
+    fn get_hr_instruction(&self) -> HumanReadableInstruction
+    {
+        if self.instruction_index >= self.program.instructions().len() {
+            // Handle the end of the program
+            return HumanReadableInstruction::undefined()
+        }
+        self.program.instructions()[self.instruction_index]
+    }
+
     fn process_instruction(
-        &mut self,
-        hr_instruction: HumanReadableInstruction,
+        &mut self
     ) -> Result<(), VMError<N>> {
+        // Get the instruction at the current index.
+        let raw_instruction = self
+            .program
+            .instructions()
+            [self.instruction_index].raw_instruction();
         let mut next_index = self.instruction_index + 1;
-        log::debug!("Processing instruction: {}", hr_instruction);
-        match hr_instruction.raw_instruction() {
+        // log::debug!("Processing instruction: {}", hr_instruction);
+        match raw_instruction {
             RawInstruction::IncrementPointer => {
                 self.move_head_right()
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: self.get_hr_instruction(),
                         reason: "Failed to move head right".to_string(),
                     })?;
             }
@@ -137,7 +148,7 @@ where
                 self.move_head_left()
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: self.get_hr_instruction(),
                         reason: "Failed to move head left".to_owned(),
                     })?;
             }
@@ -145,7 +156,7 @@ where
                 self.increment_cell()
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: self.get_hr_instruction(),
                         reason: "Failed to increment cell".to_string(),
                     })?;
             }
@@ -153,25 +164,29 @@ where
                 self.decrement_cell()
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
-                        instruction: hr_instruction,
+                        instruction: self.get_hr_instruction(),
                         reason: "Failed to decrement cell".to_string(),
                     })?;
             }
             RawInstruction::OutputByte => {
                 self.write_value().map_err(|e| VMError::IOError {
-                    instruction: hr_instruction,
+                    instruction: self.get_hr_instruction(),
                     reason: e.to_string(),
                 })?;
             }
             RawInstruction::InputByte => {
                 self.read_value().map_err(|e| VMError::IOError {
-                    instruction: hr_instruction,
+                    instruction: self.get_hr_instruction(),
                     reason: e.to_string(),
                 })?;
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell_value()?.is_zero() {
-                    let bracket_position = self.get_bracket_position(&hr_instruction)?;
+                    let bracket_position = self.get_bracket_position().map_err(
+                        |e| VMError::ProgramError  {
+                            instruction: self.get_hr_instruction(),
+                            reason: "No closing brace found".to_string(),
+                        })?;
                     log::debug!("Jumping to {}", bracket_position);
                     next_index = bracket_position;
                 };
@@ -179,11 +194,16 @@ where
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
                 // Subtract 1, since it is only in ConditionalForward that we make an assesment
-                next_index = self.get_bracket_position(&hr_instruction)? - 1;
+                let bracket_position = self.get_bracket_position().map_err(
+                    |e| VMError::ProgramError  {
+                        instruction: self.get_hr_instruction(),
+                        reason: "No opening brace found".to_string(),
+                    })?;
+                next_index = bracket_position - 1;
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
-                    instruction: hr_instruction,
+                    instruction: self.get_hr_instruction(),
                     reason: "Undefined instruction".to_string(),
                 });
             }
@@ -194,8 +214,6 @@ where
         // Move to the next instruction
         self.instruction_index = next_index;
 
-        // Track the current instruction
-        self.current_instruction = hr_instruction;
         Ok(())
     }
 
@@ -210,28 +228,11 @@ where
             }));
         }
 
-        // Get the instruction at the current index.
-        let instruction = match self
-            .program
-            .instructions()
-            .get(self.instruction_index)
-            {
-                // TODO: would very much like to get rid of this dereference
-                Some(instruction) => *instruction,
-                None => {
-                    return Err(VMError::Simple(VMErrorSimple::GeneralError {
-                        reason: "Failed to get instruction".to_string(),
-                    }))
-                }
-            };
-
         // Handle anything that might need mutation
-        self.process_instruction(instruction)?;
+        self.process_instruction()?;
 
         // Construct the current state after processing the instruction.
-        let current_state = self.construct_state();
-
-        Ok(current_state)
+        Ok(self.construct_state())
     }
 
     fn construct_state(&self) -> Option<VMState<N>> {
@@ -240,7 +241,7 @@ where
                 self.tape[self.head],
                 self.head,
                 self.instruction_index,
-                self.current_instruction.raw_instruction().to_owned(),
+                self.get_hr_instruction().raw_instruction().to_owned(),
                 self.instructions_processed,
             ));
         }
@@ -360,6 +361,23 @@ where
     pub fn iter(&mut self) -> VMIterator<'_, N> {
         VMIterator::new(self, None)
     }
+
+    // #[cfg(test)]
+    // // Helper function to setup a test u8 VM with a program from a string and cell growth bool, default cell count
+    // pub fn setup_vm_from_string(
+    //     program_string: &str,
+    //     allow_growth: bool,
+    //     cell_count: Option<NonZeroUsize>,
+    // ) -> Result<BrainfuckVM<u8>, VMError<u8>> {
+    //     let program_reader = Cursor::new(program_string);
+    //     let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
+    //         .set_program_reader(program_reader)
+    //         .set_cell_count(cell_count)
+    //         .set_allow_growth(allow_growth) // default or test-specific value
+    //         .set_report_state(true) // Need this for tests
+    //         .build()?;
+    //     Ok(vm)
+    // }
 }
 
 #[cfg(test)]
@@ -710,7 +728,7 @@ mod vm_tests {
             254,
             0,
             number_of_instructions,
-            RawInstruction::DecrementByte,
+            RawInstruction::Undefined,
             number_of_instructions,
         );
         assert!(ensure_vm_final_state(vm, expected_state));
@@ -778,7 +796,7 @@ mod vm_tests {
             buffer[number_of_instructions - 1],
             0,
             number_of_instructions,
-            RawInstruction::InputByte,
+            RawInstruction::Undefined,
             number_of_instructions,
         );
         assert!(ensure_vm_final_state(vm, expected_state));
@@ -862,7 +880,7 @@ mod vm_tests {
             buffer.pop().unwrap(),
             number_of_moves,
             number_of_instructions,
-            RawInstruction::OutputByte,
+            RawInstruction::Undefined,
             number_of_instructions,
         );
         assert!(ensure_vm_final_state(vm, expected_state));
@@ -934,7 +952,7 @@ mod vm_tests {
         assert!(state.cell_value() == 0);
         assert!(state.instruction_index() == 5);
 
-        let expected_state = VMState::<u8>::new(0, 0, 5, RawInstruction::ConditionalForward, 9);
+        let expected_state = VMState::<u8>::new(0, 0, 5, RawInstruction::Undefined, 9);
         assert!(ensure_vm_final_state(vm, expected_state));
 
         Ok(())

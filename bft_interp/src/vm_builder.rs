@@ -62,9 +62,9 @@ use std::{
 /// let cell_count = NonZeroUsize::new(1111);
 /// let vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
 ///     .set_program_file(program_file)
-///     .set_allow_growth(true)
+///     .set_allow_growth()
 ///     .set_cell_count(cell_count)
-///     .set_report_state(true)
+///     .set_report_state()
 ///     .build().expect("Failed!");
 
 #[derive(Default)]
@@ -73,8 +73,6 @@ where
     R: Read,
     W: Write,
 {
-    cell_kind: Option<TypeId>,
-
     cell_count: Option<NonZeroUsize>,
     allow_growth: Option<bool>,
     input_reader: Option<Box<R>>,
@@ -92,7 +90,6 @@ where
     /// Creates a new instance of `VMBuilder`.
     pub fn new() -> Self {
         VMBuilder {
-            cell_kind: None,
             cell_count: None,
             allow_growth: None,
             input_reader: None,
@@ -129,11 +126,6 @@ where
         self
     }
 
-    /// Specifies the type of cells used by the VM (e.g., u8, i32).
-    pub fn set_cell_kind(mut self, cell_kind: TypeId) -> Self {
-        self.cell_kind = Some(cell_kind);
-        self
-    }
 
     /// Determines the number of cells (memory size) the VM should initialize with.
     pub fn set_cell_count(mut self, cell_count: Option<NonZeroUsize>) -> Self {
