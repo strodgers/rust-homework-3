@@ -19,10 +19,10 @@ use std::{
 /// Program from a string
 ///
 /// ```rust
-/// use bft_interp::vm_builder::VMBuilder;
-/// use bft_interp::vm::BrainfuckVM;
+/// use bft_interp::builder::VMBuilder;
+/// use bft_interp::core::BrainfuckVM;
 /// # use std::io::Cursor;
-/// use bft_types::bf_program::Program;
+/// use bft_types::program::Program;
 ///
 /// let program_string = "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.";
 ///
@@ -35,10 +35,10 @@ use std::{
 /// Program from a file
 ///
 /// ```rust
-/// use bft_interp::vm_builder::VMBuilder;
-/// use bft_interp::vm::BrainfuckVM;
+/// use bft_interp::builder::VMBuilder;
+/// use bft_interp::core::BrainfuckVM;
 /// # use std::path::PathBuf;
-/// use bft_types::bf_program::Program;
+/// use bft_types::program::Program;
 ///
 /// let program_file = PathBuf::from("../benches/fib.bf");
 ///
@@ -51,10 +51,10 @@ use std::{
 /// Setting more interesting parameters
 ///
 /// ```rust
-/// use bft_interp::vm_builder::VMBuilder;
-/// use bft_interp::vm::BrainfuckVM;
+/// use bft_interp::builder::VMBuilder;
+/// use bft_interp::core::BrainfuckVM;
 /// # use std::path::PathBuf;
-/// use bft_types::bf_program::Program;
+/// use bft_types::program::Program;
 /// # use core::num::NonZeroUsize;
 ///
 /// let program_file = PathBuf::from("../benches/fib.bf");
