@@ -18,17 +18,25 @@ pub struct Cli {
     pub cell_count: Option<NonZeroUsize>,
 
     /// Enable auto-extending tape
-    #[clap(short = 'e', long)]
+    #[clap(short = 'e', long, default_value = "true")]
     pub allow_growth: bool,
 
     /// Enable state reporting. THIS WILL MAKE IT SLOW! But you get to see the
     /// interpreters state as it goes, as well as a final state
-    #[clap(short = 's', long)]
+    #[clap(short = 's', long, default_value = "false")]
     pub report_state: bool,
+
+    /// Turn off optimizations. Optimizations may speed up large/complex programs, but slow down smaller ones.
+    #[clap(short = 'n', long, default_value = "false")]
+    pub no_optimize: bool,
+
+    /// Whether or not to buffer output
+    #[clap(short = 'b', long, default_value = "false")]
+    pub buffer_output: bool,
 
     /// Sets the log level for the application.
     ///
     /// Available levels: error, warn, info, debug, trace
-    #[clap(short, long, default_value = "warn")]
+    #[clap(short, long, default_value = "info")]
     pub log_level: String,
 }

@@ -1,13 +1,11 @@
-use crate::bf_instructions::{HumanReadableInstruction, InstructionPreprocessor, RawInstruction};
+use crate::instructions::{HumanReadableInstruction, InstructionPreprocessor, RawInstruction};
 use std::{
     error::Error,
     io::{BufRead, BufReader, Read},
 };
 
-/// A Brainfuck program.
-///
-/// This struct holds the filename from which the program was loaded
-/// and a vector of instructions.
+/// A Brainfuck program initialized with a reader. Uses an `InstructionPreprocessor` to process
+/// instructions. Holds a vector containing all valid instructions.
 #[derive(Debug)]
 
 pub struct Program {
@@ -16,10 +14,11 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new<R: Read>(reader: R) -> Result<Self, Box<dyn Error>> {
-        let mut preprocessor = InstructionPreprocessor::new();
-        let instructions = Self::read_data(reader, &mut preprocessor)?;
+    pub fn new<R: Read>(reader: R, optimize: bool) -> Result<Self, Box<dyn Error>> {
+        let instructions = Self::read_data(reader)?;
+        let mut preprocessor = InstructionPreprocessor::new(instructions.len(), optimize);
 
+        preprocessor.process(&instructions)?;
         Ok(Program {
             instructions,
             preprocessor,
@@ -28,14 +27,13 @@ impl Program {
 
     fn read_data<R: Read>(
         reader: R,
-        preprocessor: &mut InstructionPreprocessor,
     ) -> Result<Vec<HumanReadableInstruction>, Box<dyn std::error::Error>> {
         // Read the data and parse into a vector of HumanReadableInstruction
         let buffread = BufReader::new(reader);
         let mut vec: Vec<HumanReadableInstruction> = Vec::new();
 
         // Go through each line
-        let mut index = usize::default();
+        let mut index = 0;
         for (line_idx, line_result) in buffread.lines().enumerate() {
             let line = line_result?;
 
@@ -43,18 +41,13 @@ impl Program {
             for (col_idx, c) in line.chars().enumerate() {
                 if let Ok(instruction) = RawInstruction::from_char(&c).ok_or("Invalid character") {
                     {
-                        index += 1;
                         let hr_instruction: HumanReadableInstruction =
                             HumanReadableInstruction::new(instruction, line_idx, col_idx, index);
-                        preprocessor.process(hr_instruction)?;
                         vec.push(hr_instruction);
+                        index += 1;
                     }
                 }
             }
-        }
-
-        if !preprocessor.balanced() {
-            return Err("Unbalanced brackets".into());
         }
 
         Ok(vec)
@@ -67,19 +60,33 @@ impl Program {
     pub fn get_bracket_position(&self, index: usize) -> Option<usize> {
         self.preprocessor.get_bracket_position(index)
     }
+
+    pub fn collapsed_count(&self, original_index: usize) -> Option<usize> {
+        self.preprocessor.collapsed_count(original_index)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bf_instructions::{InstructionPreprocessor, RawInstruction};
-    use bft_test_utils::{TestFile, TEST_FILE_NUM_INSTRUCTIONS};
-
+    use crate::instructions::{InstructionPreprocessor, RawInstruction};
+    use std::io::Write;
+    use std::io::{Seek, SeekFrom};
+    use tempfile::NamedTempFile;
     #[test]
     fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
-        let mut preprocessor: &mut InstructionPreprocessor = &mut InstructionPreprocessor::new();
-        let instructions = Program::read_data(TestFile::new()?, &mut preprocessor)?;
-        assert_eq!(instructions.len(), TEST_FILE_NUM_INSTRUCTIONS);
+        let mut file = NamedTempFile::new()?;
+        // Don't do any input/output for this kind of test
+        let program_string = "+[-[<<[+[--->]-[<<<]]]>>>-]";
+        write!(file, "{}", program_string)?;
+        file.seek(SeekFrom::Start(0))?;
+
+        let instructions = Program::read_data(file)?;
+        let preprocessor: &mut InstructionPreprocessor =
+            &mut InstructionPreprocessor::new(instructions.len(), true);
+        preprocessor.process(&instructions)?;
+
+        assert_eq!(instructions.len(), program_string.len());
 
         // "+[-[<<[+[--->]-[<<<]]]>>>-]"
         let all_instructions = [

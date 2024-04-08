@@ -23,29 +23,31 @@
 //!
 
 use clap::Parser;
-use log::LevelFilter;
-use std::error::Error;
-use std::{any::TypeId, str::FromStr};
+use env_logger::Env;
+use std::{env, error::Error};
 mod cli;
-use bft_interp::{vm::BrainfuckVM, vm_builder::VMBuilder};
+use bft_interp::{builder::VMBuilder, core::BrainfuckVM};
 use cli::Cli;
-use std::{env, process};
+use std::process;
 
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
-    let log_level = LevelFilter::from_str(&cli.log_level).unwrap_or(LevelFilter::Off);
-    if cli.report_state && log_level < LevelFilter::Info {
-        env::set_var("RUST_LOG", "info");
-    } else {
-        env::set_var("RUST_LOG", &cli.log_level);
-    }
-    env_logger::init();
+    // Get the log level from the environment variable, or use the cli arg
+    let log_level = env::var("BFT_LOG").unwrap_or_else(|_| cli.log_level.to_string());
 
+    // Set up the logger
+    let env = Env::new().filter(log_level.clone());
+    env_logger::Builder::from_env(env)
+        .parse_filters(&log_level)
+        .init();
+
+    // Use builder to make a VM instance
     let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
         .set_program_file(cli.program)
         .set_allow_growth(cli.allow_growth)
+        .set_buffer_output(cli.buffer_output)
+        .set_optimization(!cli.no_optimize)
         .set_cell_count(cli.cell_count)
-        .set_cell_kind(TypeId::of::<u8>())
         .set_report_state(cli.report_state)
         .build()
         .map_err(|e| format!("Error: {}", e))?;

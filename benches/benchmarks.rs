@@ -1,12 +1,24 @@
-use std::io::Cursor;
+use bft_interp::builder::VMBuilder;
+use bft_interp::core::BrainfuckVM;
+use criterion::black_box;
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::io::{self, Cursor, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use bft_interp::vm::BrainfuckVM;
-use bft_interp::vm_builder::VMBuilder;
-use bft_test_utils::NullWriter;
-use criterion::black_box;
-use criterion::{criterion_group, criterion_main, Criterion};
+pub struct NullWriter;
+
+impl Write for NullWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Pretend everything's okay and we wrote the whole buffer.
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        // Nothing to flush, so just say it worked.
+        Ok(())
+    }
+}
 
 fn interpreter_throughput(c: &mut Criterion) {
     // Just do a hello world program
@@ -18,6 +30,7 @@ fn interpreter_throughput(c: &mut Criterion) {
                 .set_program_reader(Cursor::new(program_string))
                 .set_cell_count(NonZeroUsize::new(30000))
                 .set_output(NullWriter)
+                .set_optimization(false) // Small program
                 .build()
                 .unwrap();
             vm.interpret().unwrap();
@@ -34,8 +47,9 @@ fn fixed_memory(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
+                .set_optimization(false) // Fixed memory, no point
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -50,8 +64,9 @@ fn memory_growth(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
+                .set_optimization(true)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -66,8 +81,9 @@ fn nested_loops(c: &mut Criterion) {
             let mut vm: BrainfuckVM<u8> = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
+                .set_optimization(true)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -82,8 +98,10 @@ fn long_program(c: &mut Criterion) {
                 .set_program_file(PathBuf::from("benches/fib.bf"))
                 .set_allow_growth(true)
                 .set_output(NullWriter)
+                .set_optimization(true)
+                .set_buffer_output(true)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
