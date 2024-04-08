@@ -73,8 +73,6 @@ where
     R: Read,
     W: Write,
 {
-    cell_kind: Option<TypeId>,
-
     cell_count: Option<NonZeroUsize>,
     allow_growth: Option<bool>,
     input_reader: Option<Box<R>>,
@@ -92,7 +90,6 @@ where
     /// Creates a new instance of `VMBuilder`.
     pub fn new() -> Self {
         VMBuilder {
-            cell_kind: None,
             cell_count: None,
             allow_growth: None,
             input_reader: None,
@@ -126,12 +123,6 @@ where
         T: Read + 'a,
     {
         self.program_reader = Some(Box::new(reader));
-        self
-    }
-
-    /// Specifies the type of cells used by the VM (e.g., u8, i32).
-    pub fn set_cell_kind(mut self, cell_kind: TypeId) -> Self {
-        self.cell_kind = Some(cell_kind);
         self
     }
 

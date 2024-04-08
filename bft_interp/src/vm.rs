@@ -1,7 +1,4 @@
-use crate::{
-    vm_error::{VMError, VMErrorSimple},
-    // vm_iterator::VMIterator,
-};
+use crate::vm_error::{VMError, VMErrorSimple};
 use bft_types::{
     bf_cellkind::CellKind,
     bf_instructions::{HumanReadableInstruction, RawInstruction},
@@ -100,17 +97,19 @@ where
         }
     }
 
+    fn get_collapsed_count(&self, index: usize) -> usize {
+        self.program.collapsed_count(index).unwrap_or_else(|| 1)
+    }
+
     fn process_instruction(&mut self) -> Result<(), VMError<N>> {
         // Most of the time, we just move forward by one. Only when there is a conditional jump will it be different.
         let mut next_index = self.instruction_index;
         let hr_instruction = self.program.instructions()[self.instruction_index];
-        let mut collapsed_count = self
-            .program
-            .collapsed_count(self.instruction_index)
-            .unwrap_or_else(|| 1);
+        let mut collapsed_count = 1;
         log::debug!("Processing instruction: {}", hr_instruction);
         match hr_instruction.raw_instruction() {
             RawInstruction::IncrementPointer => {
+                collapsed_count = self.get_collapsed_count(next_index);
                 self.move_head_right(collapsed_count).map_err(|_| {
                     VMError::InvalidHeadPosition {
                         position: self.head,
@@ -121,6 +120,7 @@ where
                 next_index += collapsed_count;
             }
             RawInstruction::DecrementPointer => {
+                collapsed_count = self.get_collapsed_count(next_index);
                 self.move_head_left(collapsed_count)
                     .map_err(|_| VMError::InvalidHeadPosition {
                         position: self.head,
@@ -130,6 +130,7 @@ where
                 next_index += collapsed_count;
             }
             RawInstruction::IncrementByte => {
+                collapsed_count = self.get_collapsed_count(next_index);
                 self.increment_cell(collapsed_count)
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
@@ -139,6 +140,7 @@ where
                 next_index += collapsed_count;
             }
             RawInstruction::DecrementByte => {
+                collapsed_count = self.get_collapsed_count(next_index);
                 self.decrement_cell(collapsed_count)
                     .map_err(|_| VMError::CellOperationError {
                         position: self.head,
@@ -153,7 +155,6 @@ where
                     reason: e.to_string(),
                 })?;
                 next_index += 1;
-                collapsed_count = 1;
             }
             RawInstruction::InputByte => {
                 self.read_value().map_err(|e| VMError::IOError {
@@ -161,23 +162,19 @@ where
                     reason: e.to_string(),
                 })?;
                 next_index += 1;
-                collapsed_count = 1;
             }
             RawInstruction::ConditionalForward => {
                 if self.current_cell_value()?.is_zero() {
                     let bracket_position = self.get_bracket_position(&hr_instruction)? + 1;
                     log::debug!("Jumping to {}", bracket_position);
                     next_index = bracket_position;
-                }
-                else {
+                } else {
                     next_index += 1;
                 }
-                collapsed_count = 1;
             }
             RawInstruction::ConditionalBackward => {
                 // Always jump back to opening bracket
                 next_index = self.get_bracket_position(&hr_instruction)?;
-                collapsed_count = 1;
             }
             RawInstruction::Undefined => {
                 return Err(VMError::ProgramError {
@@ -247,7 +244,10 @@ where
 
         match state {
             Err(VMError::Simple(VMErrorSimple::EndOfProgram { final_state })) => Ok(final_state),
-            _ => Err(VMError::Simple(VMErrorSimple::GeneralError {
+            Err(e) => Err(VMError::Simple(VMErrorSimple::GeneralError {
+                reason: format!("Error: {}", e.to_string()),
+            })),
+            Ok(_) => Err(VMError::Simple(VMErrorSimple::GeneralError {
                 reason: "Should have reached end of program!".to_string(),
             })),
         }
@@ -263,12 +263,12 @@ where
     }
 
     fn move_head_right(&mut self, collapsed_count: usize) -> Result<(), ()> {
-        if self.head >= self.tape.len() - collapsed_count {
+        if self.head + collapsed_count >= self.tape.len() {
             // Extend the tape if allowed
             if self.allow_growth {
+                let to_extend = self.head + collapsed_count - self.tape.len() + 1;
                 // Allocate 1024 to reduce the number of allocations
-                self.tape
-                    .resize(self.tape.len() + 1024 - collapsed_count, N::default());
+                self.tape.resize(self.tape.len() + to_extend, N::default());
             } else {
                 // If the tape cannot grow, then it's an error
                 return Err(());
@@ -633,7 +633,7 @@ mod vm_tests {
         let _ = vm.interpret();
 
         let expected_final_state = VMState::<u8>::new(
-            255,
+            254,
             0,
             number_of_instructions,
             RawInstruction::Undefined,

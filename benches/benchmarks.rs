@@ -35,7 +35,7 @@ fn fixed_memory(c: &mut Criterion) {
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(false) // Note: `set_allow_growth(false)` for fixed memory
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -51,7 +51,7 @@ fn memory_growth(c: &mut Criterion) {
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -67,7 +67,7 @@ fn nested_loops(c: &mut Criterion) {
                 .set_program_reader(Cursor::new(black_box(&program_string)))
                 .set_allow_growth(true)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });
@@ -83,7 +83,7 @@ fn long_program(c: &mut Criterion) {
                 .set_allow_growth(true)
                 .set_output(NullWriter)
                 .build()
-                .unwrap();
+                .expect("Failed to build VM");
             vm.interpret().unwrap();
         });
     });

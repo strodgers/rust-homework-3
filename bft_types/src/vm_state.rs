@@ -118,14 +118,6 @@ where
     N: CellKind,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Cell value: {}\nHead: {}\nNext instructionindex: {}\nLast instruction: {}\nInstructions processed: {}",
-            self.cell_value,
-            self.head,
-            self.instruction_index,
-            self.current_instruction,
-            self.instructions_processed
-        )
+        write!(f, "Instructions processed: {}", self.instructions_processed)
     }
 }
