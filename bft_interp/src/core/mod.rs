@@ -4,7 +4,7 @@ use bft_types::{
     cellkind::CellKind,
     instructions::{HumanReadableInstruction, RawInstruction},
     program::Program,
-    vm_state::{VMState, VMStateFinal},
+    state::{VMState, VMStateFinal},
 };
 use std::{
     io::{Read, Write},

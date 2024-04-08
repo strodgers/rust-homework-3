@@ -17,4 +17,4 @@ pub mod instructions;
 pub mod program;
 
 // Manages the state of the Brainfuck virtual machine during execution.
-pub mod vm_state;
+pub mod state;
