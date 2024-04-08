@@ -1,4 +1,3 @@
-
 use crate::error::{VMError, VMErrorSimple};
 use bft_types::{
     cellkind::CellKind,
@@ -359,11 +358,14 @@ where
 mod vm_tests {
     use super::*;
     use crate::builder::VMBuilder;
-    use bft_test_utils::TestFile;
     use env_logger;
     use log::LevelFilter;
     use rand::Rng;
-    use std::{io::Cursor, num::NonZeroUsize};
+    use std::{
+        io::{Cursor, Seek, SeekFrom},
+        num::NonZeroUsize,
+    };
+    use tempfile::NamedTempFile;
 
     // Setup logging for any tests that it might be useful for
     pub fn setup_logging() {
@@ -396,8 +398,14 @@ mod vm_tests {
         allow_growth: bool,
         cell_count: Option<NonZeroUsize>,
     ) -> Result<BrainfuckVM<u8>, Box<dyn std::error::Error>> {
+        let mut file = NamedTempFile::new()?;
+        // Don't do any input/output for this kind of test
+        let program_string = "+[-[<<[+[--->]-[<<<]]]>>>-]";
+        writeln!(file, "{}", program_string)?;
+        file.seek(SeekFrom::Start(0))?;
+
         let vm = VMBuilder::<std::io::Stdin, std::io::Stdout>::new()
-            .set_program_reader(TestFile::new()?)
+            .set_program_reader(file)
             .set_allow_growth(allow_growth)
             .set_cell_count(cell_count)
             .set_report_state(true) // Need this for tests

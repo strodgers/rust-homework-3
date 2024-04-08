@@ -72,16 +72,23 @@ impl Program {
 mod tests {
     use super::*;
     use crate::instructions::{InstructionPreprocessor, RawInstruction};
-    use bft_test_utils::{TestFile, TEST_FILE_NUM_INSTRUCTIONS};
-
+    use std::io::Write;
+    use std::io::{Seek, SeekFrom};
+    use tempfile::NamedTempFile;
     #[test]
     fn test_read_data() -> Result<(), Box<dyn std::error::Error>> {
-        let instructions = Program::read_data(TestFile::new()?)?;
+        let mut file = NamedTempFile::new()?;
+        // Don't do any input/output for this kind of test
+        let program_string = "+[-[<<[+[--->]-[<<<]]]>>>-]";
+        write!(file, "{}", program_string)?;
+        file.seek(SeekFrom::Start(0))?;
+
+        let instructions = Program::read_data(file)?;
         let preprocessor: &mut InstructionPreprocessor =
             &mut InstructionPreprocessor::new(instructions.len());
         preprocessor.process(&instructions)?;
 
-        assert_eq!(instructions.len(), TEST_FILE_NUM_INSTRUCTIONS);
+        assert_eq!(instructions.len(), program_string.len());
 
         // "+[-[<<[+[--->]-[<<<]]]>>>-]"
         let all_instructions = [

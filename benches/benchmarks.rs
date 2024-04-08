@@ -1,12 +1,24 @@
-use std::io::Cursor;
+use bft_interp::builder::VMBuilder;
+use bft_interp::core::BrainfuckVM;
+use criterion::black_box;
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::io::{self, Cursor, Write};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use bft_interp::core::BrainfuckVM;
-use bft_interp::builder::VMBuilder;
-use bft_test_utils::NullWriter;
-use criterion::black_box;
-use criterion::{criterion_group, criterion_main, Criterion};
+pub struct NullWriter;
+
+impl Write for NullWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Pretend everything's okay and we wrote the whole buffer.
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        // Nothing to flush, so just say it worked.
+        Ok(())
+    }
+}
 
 fn interpreter_throughput(c: &mut Criterion) {
     // Just do a hello world program

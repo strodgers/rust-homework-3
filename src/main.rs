@@ -26,7 +26,7 @@ use clap::Parser;
 use env_logger::Env;
 use std::error::Error;
 mod cli;
-use bft_interp::{core::BrainfuckVM, builder::VMBuilder};
+use bft_interp::{builder::VMBuilder, core::BrainfuckVM};
 use cli::Cli;
 use std::process;
 
