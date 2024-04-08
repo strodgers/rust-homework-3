@@ -1,6 +1,6 @@
 use core::fmt;
 
-// Enum for the raw instructions
+/// Enum for the raw instructions
 #[derive(Debug, PartialEq, Copy, Clone, Default)]
 pub enum RawInstruction {
     IncrementPointer,    // >
@@ -15,7 +15,7 @@ pub enum RawInstruction {
     Undefined,
 }
 
-// Implement a from_char method for RawInstruction
+/// RawInstruction from a char value
 impl RawInstruction {
     pub(crate) fn from_char(c: &char) -> Option<RawInstruction> {
         match c {
@@ -32,7 +32,7 @@ impl RawInstruction {
     }
 }
 
-// Corresponding display strings
+/// Corresponding display strings
 impl fmt::Display for RawInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -49,7 +49,7 @@ impl fmt::Display for RawInstruction {
     }
 }
 
-// Struct for the human readable instructions which includes a RawInstruction and the line and column index
+/// Struct for the human readable instructions which includes a RawInstruction and the line and column index
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct HumanReadableInstruction {
     instruction: RawInstruction,
@@ -90,7 +90,7 @@ impl HumanReadableInstruction {
     }
 }
 
-// Nice display string
+/// Nice display strings
 impl fmt::Display for HumanReadableInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{} {}", self.line, self.column, self.instruction)
@@ -108,6 +108,7 @@ pub(crate) struct InstructionPreprocessor {
     optimize: bool,
 }
 
+/// Handles bracket matching and optionally collapsing repeated instructions.
 impl InstructionPreprocessor {
     pub(crate) fn new(program_length: usize, optimize: bool) -> Self {
         // Preallocate the space, since we know it can't be more than the program length
@@ -119,7 +120,7 @@ impl InstructionPreprocessor {
         };
         InstructionPreprocessor {
             matching_brackets: vec![None; program_length],
-            collapsed_instructions: collapsed_instructions,
+            collapsed_instructions,
             optimize,
         }
     }

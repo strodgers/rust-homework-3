@@ -1,19 +1,53 @@
-use num_traits::{FromBytes, Num, NumCast};
+/// The `CellKind` trait represents the type of cell that the tape will use.
+/// It is implemented for `u8` and provides methods for manipulating and accessing the cell value.
+/// The `CellKind` trait requires the associated type `Value` to be defined.
+///
+use num_traits::{Num, NumCast};
 use std::fmt::{Debug, Display};
 
-pub trait CellKind:
-    Num + NumCast + Copy + PartialEq + Eq + Display + FromBytes + Default + Debug
-{
+/// Trait representing a kind of cell used by the BF interpreter program.
+
+pub trait CellKind: Num + NumCast + Copy + Display + Default + Debug {
+    /// The value type associated with this cell kind.
     type Value;
 
+    /// Increment the value of the cell by one
     fn increment(&mut self);
+
+    /// Decrement the value of the cell by one
     fn decrement(&mut self);
+
+    /// Set the value of the cell.
     fn set(&mut self, value: Self);
+
+    /// Get the value of the cell.
     fn get(&self) -> Self;
+
+    /// Convert a byte slice to a cell value.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The byte slice to convert.
+    ///
+    /// # Returns
+    ///
+    /// The converted cell value, or an error if the conversion fails.
     fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>>
     where
         Self: Sized;
+
+    /// Convert the cell value to a byte vector.
+    ///
+    /// # Returns
+    ///
+    /// The byte vector representing the cell value.
     fn to_bytes(&self) -> Vec<u8>;
+
+    /// Get the number of bytes occupied by each cell of this kind.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes occupied by each cell of this kind.
     fn bytes_per_cell() -> usize {
         std::mem::size_of::<Self::Value>()
     }

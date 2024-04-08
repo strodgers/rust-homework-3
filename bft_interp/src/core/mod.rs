@@ -359,11 +359,6 @@ where
 
         Ok(())
     }
-
-    // Returns an iterator that allows stepping through the program execution
-    // pub fn iter(&mut self) -> VMIterator<N> {
-    //     VMIterator::new(self)
-    // }
 }
 
 #[cfg(test)]
@@ -400,6 +395,7 @@ mod vm_tests {
             .set_program_reader(program_reader)
             .set_cell_count(cell_count)
             .set_allow_growth(allow_growth) // default or test-specific value
+            .set_optimization(true)
             .set_report_state(true) // Need this for tests
             .build()?;
         Ok(vm)

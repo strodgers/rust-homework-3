@@ -4,10 +4,8 @@ use std::{
     io::{BufRead, BufReader, Read},
 };
 
-/// A Brainfuck program.
-///
-/// This struct holds the filename from which the program was loaded
-/// and a vector of instructions.
+/// A Brainfuck program initialized with a reader. Uses an `InstructionPreprocessor` to process
+/// instructions. Holds a vector containing all valid instructions.
 #[derive(Debug)]
 
 pub struct Program {

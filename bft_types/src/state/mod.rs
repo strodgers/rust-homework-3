@@ -2,65 +2,7 @@ use crate::cellkind::CellKind;
 use crate::instructions::RawInstruction;
 use core::fmt;
 
-// Extends VMState with a snapshot of the VM's tape at the end of program execution,
-// providing a complete picture of the final program state
-#[derive(PartialEq, Debug, Clone)]
-pub struct VMStateFinal<N>
-where
-    N: CellKind,
-{
-    state: Option<VMState<N>>,
-    tape: Vec<N>,
-}
-
-impl<N> VMStateFinal<N>
-where
-    N: CellKind,
-{
-    pub fn new(state: Option<VMState<N>>, tape: Vec<N>) -> Self {
-        VMStateFinal { state, tape }
-    }
-
-    pub fn state(&self) -> Option<VMState<N>> {
-        self.state.clone()
-    }
-
-    pub fn tape(&self) -> Vec<N> {
-        self.tape.clone()
-    }
-}
-impl<N> fmt::Display for VMStateFinal<N>
-where
-    N: CellKind + fmt::Display, // Ensure N implements fmt::Display for direct printing
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let non_zero_cells: Vec<(usize, &N)> = self
-            .tape
-            .iter()
-            .enumerate()
-            .filter(|&(_, x)| !x.is_zero())
-            .collect();
-
-        // Creating a string representation of non_zero_cells
-        let non_zero_cells_str = non_zero_cells
-            .iter()
-            .map(|&(index, value)| format!("[{}, {}]", index, value))
-            .collect::<Vec<String>>()
-            .join(",");
-        if self.state.is_some() {
-            write!(
-                f,
-                "{}\nTape:\n{}\n",
-                self.state.as_ref().unwrap(),
-                non_zero_cells_str
-            )
-        } else {
-            write!(f, "No state available\nTape:\n{}", non_zero_cells_str)
-        }
-    }
-}
-
-// Represents the state of the VM at a specific point in execution, useful for debugging or state inspection
+/// Represents the state of the VM at a specific point in execution, useful for debugging or state inspection.
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct VMState<N>
 where
@@ -119,5 +61,63 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Instructions processed: {}", self.instructions_processed)
+    }
+}
+
+/// Extends VMState with a snapshot of the VM's tape at the end of program execution,
+/// providing a complete picture of the final program state
+#[derive(PartialEq, Debug, Clone)]
+pub struct VMStateFinal<N>
+where
+    N: CellKind,
+{
+    state: Option<VMState<N>>,
+    tape: Vec<N>,
+}
+
+impl<N> VMStateFinal<N>
+where
+    N: CellKind,
+{
+    pub fn new(state: Option<VMState<N>>, tape: Vec<N>) -> Self {
+        VMStateFinal { state, tape }
+    }
+
+    pub fn state(&self) -> Option<VMState<N>> {
+        self.state.clone()
+    }
+
+    pub fn tape(&self) -> Vec<N> {
+        self.tape.clone()
+    }
+}
+impl<N> fmt::Display for VMStateFinal<N>
+where
+    N: CellKind + fmt::Display, // Ensure N implements fmt::Display for direct printing
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let non_zero_cells: Vec<(usize, &N)> = self
+            .tape
+            .iter()
+            .enumerate()
+            .filter(|&(_, x)| !x.is_zero())
+            .collect();
+
+        // Creating a string representation of non_zero_cells
+        let non_zero_cells_str = non_zero_cells
+            .iter()
+            .map(|&(index, value)| format!("[{}, {}]", index, value))
+            .collect::<Vec<String>>()
+            .join(",");
+        if self.state.is_some() {
+            write!(
+                f,
+                "{}\nTape:\n{}\n",
+                self.state.as_ref().unwrap(),
+                non_zero_cells_str
+            )
+        } else {
+            write!(f, "No state available\nTape:\n{}", non_zero_cells_str)
+        }
     }
 }

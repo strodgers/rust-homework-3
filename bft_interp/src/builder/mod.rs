@@ -102,7 +102,7 @@ where
             report_state: None,
         }
     }
-    /// Configures the VM to use a custom input stream.
+    /// Sets a custom input stream for the VM.
     pub fn set_input(mut self, input: R) -> Self {
         self.input_reader = Some(Box::new(input));
         self

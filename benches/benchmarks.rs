@@ -99,6 +99,7 @@ fn long_program(c: &mut Criterion) {
                 .set_allow_growth(true)
                 .set_output(NullWriter)
                 .set_optimization(true)
+                .set_buffer_output(true)
                 .build()
                 .expect("Failed to build VM");
             vm.interpret().unwrap();
