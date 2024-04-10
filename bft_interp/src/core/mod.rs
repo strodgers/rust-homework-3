@@ -464,8 +464,8 @@ mod vm_tests {
         let half_way = 5;
         // Preallocate enough space
         let mut program_string = String::with_capacity(2 * half_way);
-        program_string.extend(">".repeat(half_way).chars());
-        program_string.extend("<".repeat(half_way).chars());
+        program_string.push_str(&">".repeat(half_way));
+        program_string.push_str(&"<".repeat(half_way));
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(half_way * 2))?;
 
         // Go forward. With collapsed instructions, this should be a single step
@@ -510,7 +510,7 @@ mod vm_tests {
     #[test]
     fn test_move_head_left_error() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = "<";
-        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
+        let mut vm = setup_vm_from_string(program_string, false, NonZeroUsize::new(1))?;
 
         // Go back one, should be an error
         if let Err(VMError::InvalidHeadPosition {
@@ -532,7 +532,7 @@ mod vm_tests {
     #[test]
     fn test_move_head_right_error() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = ">";
-        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
+        let mut vm = setup_vm_from_string(program_string, false, NonZeroUsize::new(1))?;
         // Go forward one, should be an error
         if let Err(VMError::InvalidHeadPosition {
             position, reason, ..
@@ -556,8 +556,8 @@ mod vm_tests {
         let max_cell_value = u8::MAX as usize;
         // Preallocate enough space
         let mut program_string = String::with_capacity(2 * max_cell_value);
-        program_string.extend("+".repeat(max_cell_value).chars());
-        program_string.extend("-".repeat(max_cell_value).chars());
+        program_string.push_str(&"+".repeat(max_cell_value));
+        program_string.push_str(&"-".repeat(max_cell_value));
         let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
 
         // Increment cell value 255 times
@@ -605,7 +605,7 @@ mod vm_tests {
     #[test]
     fn test_cell_wrapping() -> Result<(), Box<dyn std::error::Error>> {
         let program_string = "-+";
-        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(1))?;
+        let mut vm = setup_vm_from_string(program_string, false, NonZeroUsize::new(1))?;
 
         let expected_cell_value: u8 = 255;
         match vm.interpret_step() {
@@ -643,7 +643,7 @@ mod vm_tests {
         // Don't use any conditional forwards here, easier to define the end
         let program_string = "++-->+<--";
         let number_of_instructions = program_string.len();
-        let mut vm = setup_vm_from_string(&program_string, false, NonZeroUsize::new(2))?;
+        let mut vm = setup_vm_from_string(program_string, false, NonZeroUsize::new(2))?;
         let _ = vm.interpret();
 
         let expected_final_state = VMState::<u8>::new(
@@ -659,13 +659,13 @@ mod vm_tests {
     }
 
     #[test]
-    fn test_input_success<'a>() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_input_success() -> Result<(), Box<dyn std::error::Error>> {
         setup_logging();
 
         let number_of_instructions = 10000;
         // Preallocate enough space
         let mut program_string = String::with_capacity(number_of_instructions);
-        program_string.extend(",".repeat(number_of_instructions).chars());
+        program_string.push_str(&",".repeat(number_of_instructions));
         let cell_count = NonZeroUsize::new(1);
 
         // Generate some random u8 values
@@ -683,10 +683,9 @@ mod vm_tests {
             .build()
             .map_err(|e| format!("{}", e))?;
 
-        for input_index in 0..number_of_instructions {
+        for rng_value in buffer.iter().take(number_of_instructions) {
             match vm.interpret_step() {
                 Ok(Some(state)) => {
-                    let rng_value = buffer[input_index];
                     // Print these out just to be sure
                     log::debug!(
                         "Cell value: {}, RNG value: {}",
@@ -695,7 +694,7 @@ mod vm_tests {
                     );
                     assert_eq!(
                         state.cell_value(),
-                        rng_value,
+                        *rng_value,
                         "Cell value should match the read value"
                     );
                 }
@@ -739,7 +738,7 @@ mod vm_tests {
 
         // Preallocate enough space
         let mut program_string = String::with_capacity(number_of_instructions);
-        program_string.extend(".>".repeat(number_of_reads).chars());
+        program_string.push_str(&".>".repeat(number_of_reads));
         // Remove the final > so we don't go over the cell count
         program_string.pop();
         let cell_count = NonZeroUsize::new(number_of_moves);
@@ -824,7 +823,7 @@ mod vm_tests {
              -       // Decrement the current cell
             ]        // End the loop only after the decrement has happened twice
             ";
-        let mut vm = setup_vm_from_string(&program_string, true, None)?;
+        let mut vm = setup_vm_from_string(program_string, true, None)?;
 
         // First two iterations should increment the first cell, instruction_index goes up normally
         let mut state = vm.interpret_step()?.unwrap();
