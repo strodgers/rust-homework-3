@@ -5,6 +5,9 @@
 use num_traits::{Num, NumCast};
 use std::fmt::{Debug, Display};
 
+// TODO: Nominally this does not belong here, it's part of the interpreter not the types crate.
+// Also, wow that's a huge list of dependencies which seem unnecessary.
+// Also also, DRY this out please?
 /// Trait representing a kind of cell used by the BF interpreter program.
 
 pub trait CellKind: Num + NumCast + Copy + Display + Default + Debug {
@@ -17,12 +20,15 @@ pub trait CellKind: Num + NumCast + Copy + Display + Default + Debug {
     /// Decrement the value of the cell by one
     fn decrement(&mut self);
 
+    // TODO: Set ought to take a u8 per instructions
     /// Set the value of the cell.
     fn set(&mut self, value: Self);
 
+    // TODO: Get ought to return a u8 per instructions
     /// Get the value of the cell.
     fn get(&self) -> Self;
 
+    // TODO: Seems odd to have this
     /// Convert a byte slice to a cell value.
     ///
     /// # Arguments
@@ -36,6 +42,7 @@ pub trait CellKind: Num + NumCast + Copy + Display + Default + Debug {
     where
         Self: Sized;
 
+    // TODO: IO is always a byte at a time, that's how dot and comma are defined.
     /// Convert the cell value to a byte vector.
     ///
     /// # Returns
@@ -43,6 +50,7 @@ pub trait CellKind: Num + NumCast + Copy + Display + Default + Debug {
     /// The byte vector representing the cell value.
     fn to_bytes(&self) -> Vec<u8>;
 
+    // TODO: This seems odd.
     /// Get the number of bytes occupied by each cell of this kind.
     ///
     /// # Returns

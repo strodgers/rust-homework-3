@@ -131,6 +131,14 @@ where
 
     /// Determines the number of cells (memory size) the VM should initialize with.
     pub fn set_cell_count(mut self, cell_count: Option<NonZeroUsize>) -> Self {
+        // TODO: this can more neatly be written as:
+        // self.cell_count = Some(cell_count.or(NonZeroUsize::new(30_000)));
+        // Though that lacks the info logging you might desperately want,
+        // in which case:
+        // self.cell_count = cell_count.or_else(|| {
+        //     log::info!("Using default cell_count of 30,000");
+        //     NonZeroUsize::new(30_000)
+        // });
         match cell_count {
             Some(count) => self.cell_count = Some(count),
             None => {

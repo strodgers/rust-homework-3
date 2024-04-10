@@ -1,6 +1,7 @@
 use core::fmt;
 
 /// Enum for the raw instructions
+// TODO: So close, pity that those aren't documentation.
 #[derive(Debug, PartialEq, Copy, Clone, Default)]
 pub enum RawInstruction {
     IncrementPointer,    // >
@@ -11,6 +12,7 @@ pub enum RawInstruction {
     InputByte,           // ,
     ConditionalForward,  // [
     ConditionalBackward, // ]
+    // TODO: unnecessary?
     #[default]
     Undefined,
 }
@@ -183,6 +185,7 @@ impl InstructionPreprocessor {
             }
 
             if !open_brackets.is_empty() {
+                // TODO: This pattern is madness.
                 let err_msg = "Unmatched opening bracket".to_string();
                 log::error!("{}", err_msg);
                 return Err(err_msg.into());

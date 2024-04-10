@@ -14,6 +14,7 @@ pub struct Program {
 }
 
 impl Program {
+    // TODO: Libraries should never return Box<dyn Error> - derive proper error enums please
     pub fn new<R: Read>(reader: R, optimize: bool) -> Result<Self, Box<dyn Error>> {
         let instructions = Self::read_data(reader)?;
         let mut preprocessor = InstructionPreprocessor::new(instructions.len(), optimize);
@@ -53,6 +54,7 @@ impl Program {
         Ok(vec)
     }
 
+    // TODO: As per previous discussions, this should be &[T] not &Vec<T>
     pub fn instructions(&self) -> &Vec<HumanReadableInstruction> {
         &self.instructions
     }

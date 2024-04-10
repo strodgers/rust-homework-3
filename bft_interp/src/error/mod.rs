@@ -22,6 +22,9 @@ where
     BuilderError {
         reason: String,
     },
+    // TODO: No, bad monkey, no banana.  Do not use error kinds to indicate normal completion
+    // you are a python programmer AICMFP.
+    //
     // Signifies the normal completion of program execution, including a COPY of the final state of the VM for inspection
     EndOfProgram {
         final_state: Option<VMStateFinal<N>>,
@@ -58,6 +61,7 @@ where
 // So we can use it with Box dyn Error
 impl<N> std::error::Error for VMError<N> where N: CellKind {}
 
+// Could this have been simplified with `thiserror`?
 impl<N> fmt::Display for VMError<N>
 where
     N: CellKind,

@@ -33,9 +33,17 @@ use std::process;
 /// Run the interpreter using CLI args
 fn run_bft(cli: Cli) -> Result<(), Box<dyn Error>> {
     // Get the log level from the environment variable, or use the cli arg
+    // TODO: This way the envvar overrides the cli entry.
     let log_level = env::var("BFT_LOG").unwrap_or_else(|_| cli.log_level.to_string());
+    // better is to turn on env in clap and in your cli parser (see TODOs in that module)
 
     // Set up the logger
+    // TODO: This feels wonky somehow, perhaps:
+    // env_logger::Builder::new()
+    //     .parse_filters(&cli.log_level)
+    //     .parse_write_style("auto")
+    //     .init();
+
     let env = Env::new().filter(log_level.clone());
     env_logger::Builder::from_env(env)
         .parse_filters(&log_level)

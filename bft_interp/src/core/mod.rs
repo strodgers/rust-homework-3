@@ -10,6 +10,7 @@ use std::{
     num::NonZeroUsize,
 };
 
+// TODO: Maybe some nice docs?
 // Represents the VM capable of interpreting Brainfuck programs. It manages the execution environment
 // including the tape (memory), the instruction pointer, input/output streams, and execution state.
 pub struct BrainfuckVM<N>
