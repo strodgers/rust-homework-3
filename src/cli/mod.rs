@@ -37,6 +37,6 @@ pub struct Cli {
     /// Sets the log level for the application.
     ///
     /// Available levels: error, warn, info, debug, trace
-    #[clap(short, long, default_value = "info")]
+    #[clap(short, long, default_value = "warn")]
     pub log_level: String,
 }
